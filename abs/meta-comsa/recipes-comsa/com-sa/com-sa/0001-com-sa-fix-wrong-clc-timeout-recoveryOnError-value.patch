@@ -1,0 +1,42 @@
+diff --git a/src/com_specific/sdp/ETF_template.xml b/src/com_specific/sdp/ETF_template.xml
+index 1a2dc0c..2b14901 100644
+--- a/src/com_specific/sdp/ETF_template.xml
++++ b/src/com_specific/sdp/ETF_template.xml
+@@ -8,7 +8,7 @@
+   <AmfEntityType>
+     <SGType name="safSgType=ERIC-ComSa-2N" version="safVersion=1.0.0">
+       <suType name="safSuType=ERIC-ComSa-Cmw" version="safVersion=1.0.0"/>
+-      <redModel>SA_AMF_2N_REDUNDANCY_MODEL</redModel>
++      <redModel>SA_AMF_NO_REDUNDANCY_MODEL</redModel>
+     </SGType>
+   </AmfEntityType>
+   <AmfEntityType>
+@@ -27,22 +27,22 @@
+       <saAware>
+         <healthCheck key="safHealthcheckKey=COM_SA">
+             <period lowerBound="240000000000" default="240000000000"/>
+-            <maxDuration lowerBound="180000000000"/>
++            <maxDuration lowerBound="240000000000"/>
+       </healthCheck>
+         <independent>
+           <instantiateCmd>
+-            <command>../usr/bin/comsa.sh</command>
++            <command>/usr/bin/comsa.sh</command>
+             <args>start</args>
+           </instantiateCmd>
+           <cleanupCmd>
+-            <command>com/bin/com.sh</command>
++            <command>/opt/com/bin/com.sh</command>
+             <args>stop</args>
+           </cleanupCmd>
+         </independent>
+       </saAware>
+-            <recoveryOnError>SA_AMF_NO_RECOMMENDATION</recoveryOnError>
+-            <defaultClcCliTimeOut default="10000000000" lowerBound="10000000000"/>
+-            <defaultCallbackTimeOut lowerBound="200000000000"/>
++      <recoveryOnError>SA_AMF_COMPONENT_RESTART</recoveryOnError>
++      <defaultClcCliTimeOut default="300000000000" lowerBound="300000000000"/>
++      <defaultCallbackTimeOut lowerBound="300000000000"/>
+       <bundleReference name="safSmfBundle=ERIC-ComSa-CXP9017697_3-R1A01"/>
+     </CompType>
+   </AmfEntityType>

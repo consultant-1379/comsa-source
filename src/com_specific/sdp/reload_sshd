@@ -1,0 +1,48 @@
+#!/bin/sh
+##
+##  Script for restarting the COM SA controlled SSHD
+##
+# Copyright (C) 2015 by Ericsson AB
+# S - 125 26  STOCKHOLM
+# SWEDEN, tel int + 46 10 719 0000
+#
+# The copyright to the computer program herein is the property of
+# Ericsson AB. The program may be used and/or copied only with the
+# written permission from Ericsson AB, or in accordance with the terms
+# and conditions stipulated in the agreement/contract under which the
+# program has been supplied.
+#
+# All rights reserved.
+
+# Check sshd debug
+SSHD_DEBUG=0
+
+# Check sshd lock
+SSHD_LOCK_FILE="/etc/ssh/sshd_config.lock"
+
+#define debuglogger
+if [ $SSHD_DEBUG -eq 1 ] ; then
+	debuglogger=/bin/logger
+else
+	debuglogger=/bin/true
+fi
+
+
+# Main
+PID=`ps auxwww | grep '\d*.*/usr/sbin/sshd\s\-D\(\(\s*\)\|\(.*sshd_config\s*\)\)$' | awk '{print $2}'`
+$debuglogger "reload_sshd: found SSHD pid [$PID]"
+
+if [ -n "${PID}" ]; then
+	$debuglogger "Stopping SSHD (pid $PID)"
+	/bin/kill -1 ${PID}
+fi
+
+
+if [ -f $SSHD_LOCK_FILE ]; then
+	# Remove lock file
+	$debuglogger "reload_sshd: remove sshd_config lock file"
+	/bin/rm -f ${SSHD_LOCK_FILE}
+fi
+
+
+exit 0

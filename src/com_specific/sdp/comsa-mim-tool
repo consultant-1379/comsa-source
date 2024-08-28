@@ -1,0 +1,306 @@
+#!/bin/sh
+##
+## comsa-mim-tool --
+##
+## Handles COM restart. Performs amf-adm lock and unlock for SU restart
+## and waits for the AMF callback
+##
+## Usage: comsa-mim-tool com_switchover
+##
+
+COMSA_DIR="/comsa_for_coremw-apr9010555"
+
+## PSO API
+PERSISTENT_STORAGE_API="/usr/share/pso/storage-paths"
+PERSISTENT_STORAGE_API_CONFIG="${PERSISTENT_STORAGE_API}/config"
+PERSISTENT_STORAGE_API_CLEAR="${PERSISTENT_STORAGE_API}/clear"
+
+prg=$(basename $0)
+dir=$(dirname $0); dir=$(cd $dir; pwd)
+tmp=$(mktemp -td ${prg}_XXXXXX)
+storage=/home/comsa
+repository="${storage}/repository"
+tmpSwitchOverLockFile="/tmp/comsa-mim-tool-com_switchover.lock"
+CLEAR=`cat $PERSISTENT_STORAGE_API_CLEAR`
+amfHandshakeFile="${CLEAR}${COMSA_DIR}/pending_comsa_restart"
+
+die() {
+    #echo "ERROR: $*" >&2
+    logger -s -t COM_SA -p user.err "ERROR ($prg): $@"
+    rm -rf $tmp
+    exit 1
+}
+
+info() {
+        logger -s -t COM_SA -p user.info "INFORMATION ($prg): $@"
+}
+
+help() {
+    grep '^##' $0 | cut -c3-
+    rm -rf $tmp
+    exit 0
+}
+
+test -n "$1" || help
+
+# Set root path for COM in CBA env, used by com-mim-tool to locate models
+if [ -f ${PERSISTENT_STORAGE_API_CONFIG} ]; then
+    CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CONFIG`
+    storage="${CONF_REPOS}/comsa_for_coremw-apr9010555"
+    info "comsa-mim-tool storage location $storage"
+    repository="${storage}/repository"
+else
+    repository=$storage/repository
+fi
+
+logger -t COM_SA -p user.info "Invoked [$prg $@]"
+
+# cleanFlagFolder is meant to decide whether it is allowed to remove the temporary directories used be this script
+cleanFlagFolder="$repository/cleanFlagFolder"
+remove_sdp_list="$repository/remove_sdp_list"
+add_sdp_list="$repository/add_sdp_list"
+
+deleteSdpRepositoryFromFileSystem() {
+    info "Remove sdp folder"
+    if [ -f $cleanFlagFolder ]; then
+        if [ -f $remove_sdp_list ]; then
+            if [ -f $add_sdp_list ]; then
+                for line in `cat $remove_sdp_list`
+                do
+                    local lineGrep=`grep -l $line $add_sdp_list`
+                    if [ ${lineGrep:-""} = "" ]; then
+                        test -d $repository/$line && rm -rf $repository/$line
+                    fi
+                done
+            else
+                for line in `cat $remove_sdp_list`
+                do
+                    test -d $repository/$line && rm -rf $repository/$line
+                done
+            fi
+            rm $remove_sdp_list
+        fi
+        if [ -f $add_sdp_list ]; then
+            rm $add_sdp_list
+        fi
+        rm $cleanFlagFolder
+    fi
+}
+
+#
+# This is a helper function that will restart com_sa su instances.
+# The com_sa su's comes in two versions, on a standard coremw system
+# there is two compnents that we need to restart, on a APG version
+# there is only one component instance to restart.
+# amf-adm lock & unlock process is used for SU restart and timeout for this
+# command is increased to 240sec
+# For restart adm lock/unclock is done first on standby node and
+# then on the active node
+#
+switchover_comsa() {
+   comPid1=`pidof /opt/com/bin/com`
+
+   # Switch active node first, then standby node
+   isNode2Active=`cmw-status -v csiass | grep -i comsa -A 2 | grep -iE "HaState.*ACTIVE" -B 1 | grep -iE "safSu=.*2.*,safSg" -m 1 -c`
+   isNode2Active_esmDn=`cmw-status -v csiass | grep com-oam-server -A 2 | grep -iE "HaState.*ACTIVE" -B 1 | grep -iE "safSu=.*2.*,safSg" -m 1 -c`
+
+   isSwitchingNode1=` cmw-status  -v comp | grep  -iE  "$switchover_dn" | grep -iE "safSu=.*1(\s*|.*safSg.*)$" -m 1 -c`
+   isSwitchingNode2=` cmw-status  -v comp | grep  -iE  "$switchover_dn" | grep -iE "safSu=.*2(\s*|.*safSg.*)$" -m 1 -c`
+
+   if [ "$isNode2Active" -eq 0 ] && [ "$isNode2Active_esmDn" -eq 0 ]; then
+      # if node 1 is currently active, switch order SC-2/SC-1
+      sulist=`cmw-status -v comp | grep -E "$switchover_dn" | sort`
+   else
+      # node 2 is currently active, switch order SC-1/SC-2
+      sulist=`cmw-status -v comp | grep -E "$switchover_dn" | sort -r`
+   fi
+
+   usingAmfHandShake=1
+
+   if [[ ( ("$isNode2Active" -eq 0 || "$isNode2Active_esmDn" -eq 0) && "$isSwitchingNode2" -eq 1 && "$isSwitchingNode1" -eq 0 ) || ( ("$isNode2Active" -eq 1 || "$isNode2Active_esmDn" -eq 1 ) && "$isSwitchingNode2" -eq 0 && "$isSwitchingNode1" -eq 1 ) ]];  then
+      # don't use handshake when switching only standby node
+      usingAmfHandShake=0
+   fi
+
+   if [ "$usingAmfHandShake" -eq 1 ]; then
+      amfFileIsCreated=$(createAmfHandshakeFile)   # create this file and wait for the AMF callback
+                                                   # to remove it as a handshake for the immadm command
+   fi
+
+   #Get the active & standby SC from sulist
+   arr=($sulist)
+   nodeCount=`echo ${#arr[@]}`
+   #info "Node Count: $nodeCount"
+   utility="amf-adm -t 240"
+   if [ `which cmw-utility` ]; then
+      utility="cmw-utility amfadm -t 240"
+   fi
+
+   if [ "$nodeCount" -eq 2 ]; then
+      activeSC=`echo ${arr[0]} | cut -d"," -f2,3,4`
+      standbySC=`echo ${arr[1]} | cut -d"," -f2,3,4`
+      info "Active: $activeSC, Standby: $standbySC"
+      info "Restarting dual node"
+      $utility lock $standbySC
+      $utility lock-in $standbySC
+      $utility lock $activeSC
+      $utility lock-in $activeSC
+      $utility unlock-in $activeSC
+      $utility unlock $activeSC
+      $utility unlock-in $standbySC
+      $utility unlock $standbySC
+   else
+      activeSC=`echo ${arr[0]} | cut -d"," -f2,3,4`
+      info "Restarting single node"
+      $utility lock $activeSC
+      $utility lock-in $activeSC
+      $utility unlock-in $activeSC
+      $utility unlock $activeSC
+   fi
+
+   if [ "$usingAmfHandShake" -eq 1 ]; then
+      waitForAmfCallback $amfFileIsCreated
+   fi
+
+   comPid2=`pidof /opt/com/bin/com`
+   if [ "$comPid1" != "$comPid2" ]; then
+      if [ -f $cleanFlagFolder ]; then
+         deleteSdpRepositoryFromFileSystem
+      fi
+   fi
+
+}
+# Count the number of comsa-mim-tool process which is running
+get_count_switchover() {
+   pids=`pidof -x comsa-mim-tool`
+   count=0
+   for pid in ${pids}
+   do
+      if grep com_switchover /proc/${pid}/cmdline > /dev/null 2>&1; then
+         count=`expr $count + 1`
+      fi
+   done
+
+   return $count
+}
+
+## comsa-mim-tool com_switchover
+##
+## When model file configuration has been updated and commited COM needs to reload
+## the changes to make them active. This command will trigger COM to reload the
+## model files.
+## Please note that if a new model handler has been added/removed then COM need to be
+## fully restarted manually. But applications should normally not need to add a new
+## model handler.
+##
+## Example
+##        comsa-mim-tool com_switchover
+##
+cmd_com_switchover() {
+   #switchover_dn is based on the below possibilities
+   #DEFAULT DN: safComp=com-oam-server,safSu=SC-*,safSg=2N,safApp=ERIC-com.oam.access.aggregation
+
+   if [ -n "$1" ]
+   then
+      switchover_dn="^$1"
+   else
+      switchover_dn="^safComp=com-oam-server.*,"
+   fi
+
+   # Prevent concurrent calling of switchover from 2 or more scripts
+   # Wait max 60 sec
+   MAX_COUNT=30
+   COUNT=$MAX_COUNT
+   # If there is no other "comsa-mim-tool com_switchover" is running, remmove lock file
+   get_count_switchover
+   countSwitchover=$?
+
+   if [ $countSwitchover -lt 2 ]; then
+      rm -rf $tmpSwitchOverLockFile
+   fi
+
+   while [ $COUNT -gt 0 ]
+   do
+      if [ ! -f $tmpSwitchOverLockFile ]; then
+         touch $tmpSwitchOverLockFile
+         if [ $COUNT -lt $MAX_COUNT ]; then
+            info "comsa-mim-tool com_switchover: continues executing"
+         fi
+         switchover_comsa
+         rm -rf $tmpSwitchOverLockFile
+         break
+      else
+         if [ $COUNT -eq $MAX_COUNT ]; then
+            info "Another comsa-mim-tool com_switchover is running. Waiting..."
+         fi
+         sleep 2
+         COUNT=$[$COUNT - 1]
+      fi
+   done
+   if [ $COUNT -eq 0 ]; then
+      info "comsa-mim-tool com_switchover: Failed to switchover"
+   fi
+   # End for TR HT13222
+}
+
+createAmfHandshakeFile() {
+   MAX_WAIT_COUNT=20
+   WAIT_COUNT=${MAX_WAIT_COUNT}
+   amfFileIsCreated=0
+   while [ $WAIT_COUNT -gt 0 ]
+   do
+      touch ${amfHandshakeFile}
+      if [ ! -f ${amfHandshakeFile} ]; then
+         sleep 1
+         WAIT_COUNT=$[$WAIT_COUNT - 1]
+      else
+         break
+      fi
+   done
+   if [ $WAIT_COUNT -eq 0 ]; then
+      info "comsa-mim-tool: createAmfHandshakeFile timeout!"
+     amfFileIsCreated=1
+   fi
+   echo $amfFileIsCreated
+}
+
+waitForAmfCallback() {
+   # Wait for up to 30 sec
+   MAX_WAIT_COUNT=30
+   WAIT_COUNT=${MAX_WAIT_COUNT}
+   amfFileIsCreated=$1
+   if [ $amfFileIsCreated -eq 1 ]; then
+      info "comsa-mim-tool: waiting for ${MAX_WAIT_COUNT} sec"
+      sleep $MAX_WAIT_COUNT
+   else
+      while [ $WAIT_COUNT -gt 0 ]
+      do
+        if [ -f ${amfHandshakeFile} ]; then
+          if [ $WAIT_COUNT -eq $MAX_WAIT_COUNT ]; then
+            info "Waiting for the AMF callback..."
+          fi
+          sleep 1
+          WAIT_COUNT=$[$WAIT_COUNT - 1]
+        else
+          info "Received handshake from the AMF callback. Wait count down: ${MAX_WAIT_COUNT} -> ${WAIT_COUNT}"
+          break
+        fi
+      done
+      if [ $WAIT_COUNT -eq 0 ]; then
+        info "comsa-mim-tool: Timeout while waiting for AMF callback"
+      fi
+   fi
+}
+
+# Get the command
+cmd=$1
+shift
+grep -q "^cmd_$cmd()" $0 || die "Invalid command [$cmd]"
+
+# Execute command
+trap "die Interrupted" INT TERM
+mkdir -p $tmp
+cmd_$cmd "$@"
+status=$?
+rm -rf $tmp
+exit $status

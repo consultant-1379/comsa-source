@@ -1,0 +1,99 @@
+#!/bin/sh
+##
+## Copyright (c) 2011Ericsson AB, 2010 - 2011.
+##
+## All Rights Reserved. Reproduction in whole or in part is prohibited
+## without the written consent of the copyright owner.
+##
+## ERICSSON MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE
+## SUITABILITY OF THE SOFTWARE, EITHER EXPRESS OR IMPLIED, INCLUDING
+## BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY,
+## FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT. ERICSSON
+## SHALL NOT BE LIABLE FOR ANY DAMAGES SUFFERED BY LICENSEE AS A
+## RESULT OF USING, MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS
+## DERIVATIVES.
+##
+## Author: efaiami
+##
+## Modify: xadaleg 2015-07-17	MR42277: Remove old interfaces and models
+
+##
+## ERROR print
+##
+
+
+## PSO API
+PERSISTENT_STORAGE_API="/usr/share/pso/storage-paths"
+PERSISTENT_STORAGE_API_CONFIG="${PERSISTENT_STORAGE_API}/config"
+PERSISTENT_STORAGE_API_CLEAR="${PERSISTENT_STORAGE_API}/clear"
+PERSISTENT_STORAGE_API_NOBACKUP="${PERSISTENT_STORAGE_API}/no-backup"
+PERSISTENT_STORAGE_API_SW="${PERSISTENT_STORAGE_API}/software"
+
+COMSA_DIR="/comsa_for_coremw-apr9010555"
+COMSA_OLD="/home/comsa"
+NAME=$(basename $0)
+
+##
+## INFORMATION print
+##
+info() {
+        logger -s -t COM_SA -p user.info "INFORMATION ($prg): $@"
+}
+
+sys_remove()
+{
+    info "comsa_remove_single sys_remove() called"
+    if [ -f ${PERSISTENT_STORAGE_API_CONFIG} ]; then
+        CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CONFIG`
+        COMSA_CONF_DIR="${CONF_REPOS}${COMSA_DIR}"
+        info "$COMSA_CONF_DIR"
+        if [ -d ${COMSA_CONF_DIR} ]; then
+            info "comsa_remove_single sys_remove() cleaning ${COMSA_CONF_DIR} directory"
+            `find ${COMSA_CONF_DIR}/repository/ -maxdepth 1 -regex ".*ERIC-ComSa-.*" -exec rm -rf {} \;`
+        fi
+    fi
+    if [ -f ${PERSISTENT_STORAGE_API_CLEAR} ]; then
+        CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CLEAR`
+        COMSA_CLEAR_DIR="${CONF_REPOS}${COMSA_DIR}"
+        if [ -d ${COMSA_CLEAR_DIR} ]; then
+            info "comsa_remove_single remove() ${COMSA_CLEAR_DIR} does exist, removing it"
+            rm -rf ${COMSA_CLEAR_DIR}
+            if [ $? ]; then
+                ps auxwww | grep '\d*.*/usr/sbin/sshd\s\-D\s\-f /etc/ssh/sshd_config$' | awk '{print $2}' | xargs kill -HUP  > /dev/null 2>&1
+                info "comsa_remove_single remove() ${COMSA_CLEAR_DIR} removed"
+                rm -rf ${COMSA_CLEAR_DIR}
+            fi
+        fi
+    fi
+    if [ -d ${COMSA_OLD} ]; then
+        info "comsa_remove_single remove() ${COMSA_OLD} does exist, removing it"
+        rm -rf ${COMSA_OLD}
+    fi
+}
+
+remove()
+{
+    info "comsa_remove_single remove() called"
+
+    sys_remove
+
+    `cmw-modelconsumer-notready COM_R1` || info "cmw-modelconsumer-notready COM_R1 failed"
+    `cmw-modeltype-unlink IMM-I-FM_R1` || info "cmw-modeltype-unlink IMM-I-FM_R1 failed"
+    `cmw-modeltype-unlink IMM-I-Local_Authorization_R1`   || info "cmw-modeltype-unlink IMM-I-Local_Authorization_R1 failed"
+}
+
+case $1 in
+  "remove")
+    remove
+    ;;
+  "")
+    info "sub-command must be specified"
+    info "usage: $NAME [remove]"
+    exit 1
+    ;;
+  *)
+    info "unknown command"
+    exit 1
+    ;;
+esac
+exit 0

@@ -1,0 +1,14 @@
+prefix=/usr
+exec_prefix=${prefix}
+libdir=/usr/lib64
+includedir=${prefix}/include
+
+Name: Babeltrace
+Description: libbabeltrace provides a reader for trace files, reading mainly the 
+Common Trace Format (CTF).
+Version: 1.2.1
+Requires:
+Requires.private: uuid popt
+Libs: -L${libdir} -lbabeltrace
+Cflags: -I${includedir} 
+

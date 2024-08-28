@@ -1,0 +1,17 @@
+/* -*- fill, c++ -*-
+--------------------------------------------------
+Group-definitions for Doxygen
+--------------------------------------------------
+*/
+
+/**
+ * @defgroup PmtSa Performance Management Transfer Service Agent
+ *
+ * This group defines the interfaces needed for the Performance
+ * Management Transfer Service Agent (PMT-SA).
+ *
+ * PMT-SA is the glue between COM and CoreMW and is implemented as a
+ * COM service agent. The PMT-SA component supports only two modes of
+ * operation in a HA-environment, active or stopped.
+ */
+

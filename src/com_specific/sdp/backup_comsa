@@ -1,0 +1,193 @@
+#!/bin/sh
+##
+## Copyright (c) 2011Ericsson AB, 2010 - 2011.
+##
+## All Rights Reserved. Reproduction in whole or in part is prohibited
+## without the written consent of the copyright owner.
+##
+## ERICSSON MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE
+## SUITABILITY OF THE SOFTWARE, EITHER EXPRESS OR IMPLIED, INCLUDING
+## BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY,
+## FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT. ERICSSON
+## SHALL NOT BE LIABLE FOR ANY DAMAGES SUFFERED BY LICENSEE AS A
+## RESULT OF USING, MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS
+## DERIVATIVES.
+##
+## Author: efaiami
+##
+##  This script is executed when a backup operation is performed on the node.
+
+COMSA_DIR="comsa_for_coremw-apr9010555"
+COMSA_HOME="/home/comsa"
+COMSA_BACKUP_DIR="$COMSA_HOME/backup"
+PERSISTENT_STORAGE_API="/usr/share/pso/storage-paths"
+PERSISTENT_STORAGE_API_NOBACKUP="${PERSISTENT_STORAGE_API}/no-backup"
+PERSISTENT_STORAGE_API_CONFIG="${PERSISTENT_STORAGE_API}/config"
+
+if [ -f ${PERSISTENT_STORAGE_API_CONFIG} ]; then
+    CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CONFIG`
+    COMSA_HOME="${CONF_REPOS}/${COMSA_DIR}"
+fi
+
+if [ -f ${PERSISTENT_STORAGE_API_NOBACKUP} ]; then
+    NOBACK_REPOS=`cat $PERSISTENT_STORAGE_API_NOBACKUP`
+    COMSA_BACKUP_DIR="${NOBACK_REPOS}/${COMSA_DIR}/backup"
+fi
+
+COMSA_BACKUP_NAME=$2
+COMSA_BACKUP_FPATH="${COMSA_BACKUP_DIR}/${COMSA_BACKUP_NAME}.tar.gz"
+##
+## INFORMATION print
+##
+info() {
+    logger -s -t COM_SA -p user.info "INFORMATION ($prg): $@"
+}
+
+##
+##
+##
+print_usage () {
+    info "Invalid command: $0 $*"
+    info "Usage: $0 {create <label> | restore <label> | remove <label> | list}"
+
+}
+##
+## Check the exit value from the last command and return 1 if it failed.
+##
+check_exit_value () {
+    if [ $? -ne 0 ]; then
+        info "$1"
+        exit 1
+    fi
+}
+
+##
+## Remove a file or a directory
+##
+remove_file () {
+    rm -rf "$1"
+}
+
+##
+## Create a new comsa backup directory
+##
+create_directory () {
+    mkdir -p "$1"
+    check_exit_value "Could not create "$1""
+    info ""$1" have been created"
+}
+
+##
+## Create comsa backup
+##
+create () {
+    # Create the backup directory if it does not exist
+    if [[ ! -e ${COMSA_BACKUP_DIR} ]]; then
+        create_directory $COMSA_BACKUP_DIR
+    fi
+
+    # The label can not exist
+    if [[ ! -e "${COMSA_BACKUP_FPATH}" ]]; then
+        if [ -f ${PERSISTENT_STORAGE_API_CONFIG} ]; then
+            cd $COMSA_HOME
+        else
+            cd $COMSA_HOME/repository
+        fi
+        tar -pczf "$COMSA_BACKUP_FPATH" *
+        check_exit_value "Could not create backup for $COMSA_BACKUP_NAME"
+        cd - >> /dev/null
+        info "Backup $COMSA_BACKUP_FPATH created"
+    else
+        info "The label $COMSA_BACKUP_NAME already exist"
+        exit 1
+    fi
+}
+
+##
+## remove comsa backup
+##
+remove () {
+    # Check that the label exist
+    if [ -e "${COMSA_BACKUP_FPATH}" ]; then
+        remove_file "$COMSA_BACKUP_FPATH"
+    else
+        info "Not found COMSA backup with label $COMSA_BACKUP_NAME"
+        exit 1
+    fi
+}
+
+##
+## restore comsa backup
+##
+restore () {
+    # Check that the label exist
+    if [ -e "${COMSA_BACKUP_FPATH}" ]; then
+        info "${COMSA_BACKUP_FPATH} exist"
+        if [ -e $COMSA_HOME ]; then
+            info "$COMSA_HOME"
+            rm -rf $COMSA_HOME/*
+        fi
+        if [ -f ${PERSISTENT_STORAGE_API_CONFIG} ]; then
+            tar -xzf "$COMSA_BACKUP_FPATH" -C $COMSA_HOME
+        else
+            info "backup_comsa restore() $COMSA_HOME/repository"
+            mkdir -p "$COMSA_HOME/repository"
+            tar -xzf "$COMSA_BACKUP_FPATH" -C $COMSA_HOME/repository
+        fi
+        check_exit_value "Could not extract backup for label $COMSA_BACKUP_NAME"
+     else
+        info "Not found COMSA backup with label $COMSA_BACKUP_NAME"
+        exit 1
+    fi
+}
+
+##
+## list of comsa backup
+##
+list () {
+    if [ -e ${COMSA_BACKUP_DIR} ]; then
+        for x in $COMSA_BACKUP_DIR/*.tar.gz;
+        do
+            echo $x | sed "s|${COMSA_BACKUP_DIR}/||g" | sed "s|.tar.gz||g"
+        done
+    fi
+}
+
+case "$1" in
+    create)
+        if [ "$#" = 2 ]; then
+            create
+        else
+            print_usage
+            exit 1
+        fi
+        ;;
+    restore)
+        if [ "$#" = 2 ]; then
+            restore
+        else
+            print_usage
+            exit 1
+        fi
+        ;;
+    remove)
+        if [ "$#" = 2 ]; then
+            remove
+        else
+            print_usage
+            exit 1
+        fi
+        ;;
+    list)
+        if [ "$#" = 1 ]; then
+            list
+        else
+            print_usage
+            exit 1
+        fi
+        ;;
+    *)
+        print_usage
+        exit 1
+esac
+exit 0

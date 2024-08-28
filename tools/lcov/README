@@ -1,0 +1,7 @@
+This is LCOV 1.10 - a postprocessing tool used for code coverage
+
+The tool is manually unpacked from the lcov-1.10-5.4.noarch.rpm file by using
+
+rpm2cpio lcov-1.10-5.4.noarch.rpm | cpio -idmv
+
+Tested with gcc 4.8.1 and confirmed works well

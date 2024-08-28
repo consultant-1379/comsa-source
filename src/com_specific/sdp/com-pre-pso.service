@@ -1,0 +1,20 @@
+[Unit]
+Description=COM service part of pre-pso handling
+
+# Start before pre-pso-api.target is reached to ensure
+# that com-pre-pso.service is not executed in the middle
+# of the restore handling.
+Before=pre-pso-api.target
+
+[Service]
+Type=oneshot
+
+# Reboot on failure of this unit, since it could mean
+# a faulty restoration sequence
+FailureAction=reboot
+
+ExecStart=/opt/com/util/com_pre_pso.sh
+
+[Install]
+# Ensures that this service is wanted by pso-api.target
+WantedBy=pre-pso-api.target

@@ -1,0 +1,4 @@
+[submodule "coremw-tools"]
+	path = coremw-tools
+	url = ../../coremw-tools
+        ignore = dirty

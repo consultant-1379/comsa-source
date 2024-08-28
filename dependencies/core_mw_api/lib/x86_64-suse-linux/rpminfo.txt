@@ -1,0 +1,26 @@
+Name        : opensaf-libs                 Relocations: (not relocatable)
+Version     : 4.0.B4                            Vendor: (none)
+Release     : 4.780                         Build Date: Thu 21 Jan 2010 05:18:00 PM CET
+Install Date: (not installed)               Build Host: wl75200.uab.ericsson.se
+Group       : System Environment/Libraries   Source RPM: opensaf-4.0.B4-4.780.src.rpm
+Size        : 4472683                          License: LGPL
+Signature   : (none)
+Packager    : devel@list.opensaf.org
+URL         : http://www.opensaf.org
+Summary     : The OpenSAF common runtime libraries
+Description :
+
+Distribution: (none)
+Name        : opensaf-devel                Relocations: (not relocatable)
+Version     : 4.0.B4                            Vendor: (none)
+Release     : 4.780                         Build Date: Thu 21 Jan 2010 05:18:00 PM CET
+Install Date: (not installed)               Build Host: wl75200.uab.ericsson.se
+Group       : Development/Libraries         Source RPM: opensaf-4.0.B4-4.780.src.rpm
+Size        : 3548178                          License: LGPL
+Signature   : (none)
+Packager    : devel@list.opensaf.org
+URL         : http://www.opensaf.org
+Summary     : The development environment for the OpenSAF project
+Description :
+The development libraries and header files for the OpenSAF project.
+Distribution: (none)

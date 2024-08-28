@@ -1,0 +1,173 @@
+
+---------------------------------------------------------------
+This REAMDE describes how to use Make-based buildsystem developed for COM SA.
+---------------------------------------------------------------
+
+- GNU Make 3.82 or newer
+- The environment variable 'COMSA_DEV_DIR' that should point to the folder that holds the 'src' source folders of COM SA.
+- Some thirdparty libraries that are automatically fetched from internet: GNU Readline and Libxml2 (when compiling
+  'standard' linux versions or cross-compiling).
+- A development toolchain for compiling source-code to binaries.
+  The rpmbuild binary need to be installed on the build server.
+
+---------------------------------------------------------------
+1. Description of the different environmental variables (which need to be set up before building COM SA) controlling the output:
+---------------------------------------------------------------
+
+SA_VERSION		    Revision number (e.g. P1A123)
+
+COMSA_DEV_DIR		    The path of COM SA source code.
+
+COMSA_RELEASE	    The path where the result of the build ends up.
+
+ARCHITECTURE	    Used by 'rpm' (Red Hat Packet Manager) when building
+			        RPM files, is part of the RPM file name.  Should be
+			        'ppc' for PowerPC systems, x86_64 for 64-bit systems
+			        on Intel/AMD, ia64 for Intel Itanium systems etc ...
+
+LSB_SHAREDLIBPATH	Share library path (e.g CoreMW lib path).
+
+DX_SYSROOT_X86_64	The system root depends on the target system.
+
+CC			        The name of the C-compiler to use.
+
+CXX			        The name of the C++-compiler to use.
+
+CFLAGS			    Parameters for including include files(e.g COM spi, target system include file, libxml2 include file)
+
+LDFLAGS			    Parameters for including target system lib.
+
+
+---------------------------------------------------------------
+2. Example config:
+---------------------------------------------------------------
+
+setenv SA_VERSION P1A567
+setenv COMSA_DEV_DIR /home/user/src
+setenv COMSA_RELEASE /home/user/release
+setenv ARCHITECTURE x86_64
+setenv LSB_SHAREDLIBPATH /home/user/DXCBA/opensaf/lib64
+setenv DX_SYSROOT_X86_64 /home/user/DXCBA/LOTC
+setenv CC /home/user/DXCBA/lsb/bin/x86_64-lsbcc
+setenv CXX /home/user/DXCBA/lsb/bin/x86_64-lsbc++
+setenv CFLAGS "-I$DX_SYSROOT_X86_64/include -I$DX_SYSROOT_X86_64/include/libxml2"
+setenv LDFLAGS -L$DX_SYSROOT_X86_64/lib
+
+---------------------------------------------------------------
+3. Build targets (default build is 'sles_sdp')
+---------------------------------------------------------------
+
+'clean'		Removes all build output (sdp files under $COMSA_DEV_DIR/release/) and temporary files (under /tmp/).
+
+'all'       	Builds COM SA
+
+'sles_sdp' 	Builds COM SA and creates the SLES sdp files.
+
+'rhel_sdp' 	Builds COM SA and creates the RHEL sdp files.
+
+'install'	Builds and installs COMSA for CBA embedded environment.		
+
+
+---------------------------------------------------------------
+4. To build COM SA, do:
+---------------------------------------------------------------
+
+~ > cd $COMSA_DEV_DIR/src
+$COMSA_DEV_DIR/src > make clean
+$COMSA_DEV_DIR/src > make
+
+All resulting files (sdp's) will end up in:
+$COMSA_RELEASE/
+
+
+To build for RHEL, run 'make rhel_sdp'.
+All resulting files (sdp's) will end up in:
+$COMSA_RELEASE/rhel
+
+---------------------------------------------------------------
+5. Build outcome
+---------------------------------------------------------------
+
+The following SLES 'package' files are produced when building COM SA under $COMSA_RELEASE :
+
+ComSa-CXP9017697_4.sdp
+ComSa_install.sdp
+ComSa_install_Single.sdp
+ComSa_remove.sdp
+ComSa_remove_Single.sdp
+
+The following RHEL 'package' files are produced when building COM SA under $COMSA_RELEASE/rhel :
+
+ComSa-CXP9017697_1.sdp
+ComSa_install.sdp
+ComSa_install_Single.sdp
+ComSa_remove.sdp
+ComSa_remove_Single.sdp
+---------------------------------------------------------------
+6. Configuration of COMSA for Embedded environment - comsa.bb
+---------------------------------------------------------------
+This recipe defines the tools being used, compiletime, runtime dependencies, patches, required configuration files, the build and installation variables or directories, 
+for COM-SA.
+
+TOC
+===
+
+a. Compiletime dependencies
+b. Runtime dependencies
+c. Revision
+d. Patches
+e. Configuration files 
+f. Build environment variables
+g. Directory structure
+h. Packages
+i. Any other files
+
+a. Compiletime dependencies
+* Coremw
+* Com
+* Libxml2
+
+b. Runtime dependencies
+* Coremw
+* Com
+* Libxml2
+
+c. Revision
+-----------
+Revision number governing the recipe. To be changed only with a change in recipe rather than a change in the source code.
+
+d. Patches
+----------
+Any patches which are specific to embedded environment that are to be applied over the existing source code.
+
+e. Configuration files
+----------------------
+The following configuration files are required:
+* cba_pso.conf
+* cba_comp_rstate.conf
+* cluster_size.conf
+
+f. Build Environment variables
+------------------------------
+Please refer to section 1 for various build environment variables that may be used here.
+
+g. Directory structure
+----------------------
+The files to be put into the working directory along with COMSA installation paths in this section may be defined here.
+Below is the list being included:
+- /opt/com/*
+- /var/opt/comsa
+- Path to cba_pso_path_software
+- PAth to cba_pso_path_config
+- Path to cba_pso_path_clear
+- Path to cba_pso_path_no-backup
+
+h. Packages
+-----------
+Includes the packages related to dbg & src.
+
+Any other files
+------------------
+Any other files to be added may be included here.
+
+

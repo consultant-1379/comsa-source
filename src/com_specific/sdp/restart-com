@@ -1,0 +1,54 @@
+#!/bin/sh
+##
+## Copyright (c) Ericsson AB, 2018.
+##
+
+## All Rights Reserved. Reproduction in whole or in part is prohibited
+## without the written consent of the copyright owner.
+##
+## ERICSSON MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE
+## SUITABILITY OF THE SOFTWARE, EITHER EXPRESS OR IMPLIED, INCLUDING
+## BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY,
+## FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT. ERICSSON
+## SHALL NOT BE LIABLE FOR ANY DAMAGES SUFFERED BY LICENSEE AS A
+## RESULT OF USING, MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS
+## DERIVATIVES.
+##
+##
+
+SELF_NAME=$(basename "$0")
+
+info() {
+    logger -p local0.info -t "${SELF_NAME}" "$1"
+}
+
+info "Start"
+
+#PSO API
+PERSISTENT_STORAGE_API="/usr/share/pso/storage-paths"
+PERSISTENT_STORAGE_API_CLEAR="${PERSISTENT_STORAGE_API}/clear"
+
+if [ -f "${PERSISTENT_STORAGE_API_CLEAR}" ]; then
+    PSO_CLEAR_DIR=$(cat ${PERSISTENT_STORAGE_API_CLEAR})
+    if [ -z "${PSO_CLEAR_DIR}" ] || [ ! -d "${PSO_CLEAR_DIR}" ]; then
+        logger -t "${SELF_NAME}" "ERROR: ${PSO_CLEAR_DIR} doesn't exist"
+        exit 1
+    fi
+else
+    logger -t "${SELF_NAME}" "ERROR: PSO clear API is not available"
+    exit 1
+fi
+
+RESTART_CHECK_FILE="${PSO_CLEAR_DIR}/com-apr9010443/restartNeeded"
+
+if [ -f "${RESTART_CHECK_FILE}" ]; then
+    info "New or updated model(s) found. Restarting COM"
+    `comsa-mim-tool com_switchover`
+    rm -f "${RESTART_CHECK_FILE}"
+else
+    info "No new models are added. Skipping the restart"
+fi
+
+info "End"
+
+exit 0

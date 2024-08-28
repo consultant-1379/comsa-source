@@ -1,0 +1,121 @@
+#!/usr/bin/tcsh
+# Filename: make.source
+# This file should be sourced before building COM SA, these variables are used in comsabuild and in the COM SA makefile
+# 
+# Usage: source make.source
+#
+# To get absolute path from build. ex for coverage, set environment variable: setenv USE_ABSOLUTE_PATH true
+#
+# Author: eerwest
+#
+
+echo ""
+set test_source_path = `lsof +p $$ | \grep -oE /.\*make.source`
+echo "Sourcing file: $test_source_path"
+set ABS_FOLDER_ROOT_PATH = `dirname $test_source_path`
+echo ""
+
+hostname | grep esekilxxen171 > /dev/null
+if ($status == 0) then
+    echo "This is run in Kista IT hub, using the kista specific environment variables"
+    module add gcc/4.8.1
+else
+    echo "This not in Kista, not using Kista specific environment variables"
+endif
+echo ""
+
+# Go to the folder where this file resides
+cd $ABS_FOLDER_ROOT_PATH
+
+# Set environment variable to abs path
+setenv COMSA_DEV_DIR_ABS_PATH `dirname $ABS_FOLDER_ROOT_PATH`
+
+# Either use Absolute or relative path as GIT repo dir variable
+if ("$?USE_ABSOLUTE_PATH" == 1) then
+    setenv GIT_REPO_DIR $COMSA_DEV_DIR_ABS_PATH
+else
+    setenv GIT_REPO_DIR ..
+endif
+
+echo "GIT_REPO_DIR: $GIT_REPO_DIR"
+
+setenv SA_VERSION `cat $COMSA_DEV_DIR_ABS_PATH/abs/tmp_version`
+setenv LSB_SHAREDLIBPATH $COMSA_DEV_DIR_ABS_PATH/dependencies/core_mw_api/lib/x86_64-suse-linux
+setenv CURRENT_GIT_BRANCH `git rev-parse --abbrev-ref HEAD`
+
+
+# the current dir where this file is located
+setenv CURRENT_DIR $GIT_REPO_DIR/abs
+
+setenv COM_SA_DEV $GIT_REPO_DIR
+setenv COM_SA_CXPA $GIT_REPO_DIR/release/cxp_archive
+
+# COM SA directory
+setenv COMSA_DIR $CURRENT_DIR/..
+
+# COM SA's "dev" directory
+setenv COMSA_DEV_DIR $COMSA_DIR
+
+# COM SA's "release" directory
+setenv COMSA_RELEASE $COMSA_DEV_DIR/release
+
+# system architecture setting
+setenv ARCHITECTURE x86_64
+
+# Check if comsa source has coremw-tools folder with files in it.
+set files_in_tools = 0
+if (-d $GIT_REPO_DIR/coremw-tools/) then
+  set files_in_tools = `ls $GIT_REPO_DIR/coremw-tools/ | wc -l`
+endif
+if ($files_in_tools != 0) then
+    setenv CMW_TOOLS $GIT_REPO_DIR/coremw-tools
+else
+  if (-d $GIT_REPO_DIR/../coremw-tools/) then
+    set files_in_tools = `ls $GIT_REPO_DIR/../coremw-tools/ | wc -l`
+  endif
+  if ($files_in_tools != 0) then
+    setenv CMW_TOOLS $GIT_REPO_DIR/../coremw-tools
+  else
+    if (-d $GIT_REPO_DIR/../../coremw-tools/) then
+      set files_in_tools = `ls $GIT_REPO_DIR/../../coremw-tools/ | wc -l`
+    endif
+    if ($files_in_tools != 0) then
+      setenv CMW_TOOLS $GIT_REPO_DIR/../../coremw-tools
+    else
+      if (-d $GIT_REPO_DIR/../../../coremw-tools/) then
+        set files_in_tools = `ls $GIT_REPO_DIR/../../../coremw-tools/ | wc -l`
+      endif
+      if ($files_in_tools != 0) then
+        setenv CMW_TOOLS $GIT_REPO_DIR/../../../coremw-tools
+      else
+      # Trying with a global coremw-tool in coremw_scratch
+        if (-d /proj/coremw_scratch/coremw-tools/) then
+          set files_in_tools = `ls /proj/coremw_scratch/coremw-tools/ | wc -l`
+        endif
+        if ($files_in_tools != 0) then
+          setenv CMW_TOOLS /proj/coremw_scratch/coremw-tools/
+        else
+          echo "Unable to find CoreMW Tools in repository or one or two or three levels down or in coremw_scratch"
+          echo "This is serious, without compiler it will be hard to build"
+          exit 1
+        endif
+      endif
+    endif
+  endif
+endif
+echo "CMW_TOOLS found in: $CMW_TOOLS"
+
+setenv CC $CMW_TOOLS/LSB_BUILD_ENV/lsb/bin/x86_64-lsbcc
+setenv CXX $CMW_TOOLS/LSB_BUILD_ENV/lsb/bin/x86_64-lsbc++
+
+# compiler settings
+setenv DX_SYSROOT_X86_64 $CMW_TOOLS/lotc4.0_api
+setenv CFLAGS "-I$DX_SYSROOT_X86_64/include -I$DX_SYSROOT_X86_64/include/libxml2"
+setenv LDFLAGS -L$DX_SYSROOT_X86_64/lib
+setenv LSBCC_SHAREDLIBS lttng-ust:lttng-ust-fork
+
+# Go back to the folder where this file were called
+cd -
+
+echo "Done setting environment variables"
+exit 0

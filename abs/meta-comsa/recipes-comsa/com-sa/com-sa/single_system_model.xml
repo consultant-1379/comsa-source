@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<imm:IMM-contents xmlns:imm="http://www.saforum.org/IMMSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="SAI-AIS-IMM-XSD-A.01.01.xsd">
+	<object class="SaAmfAppBaseType">
+		<dn>safAppType=ERIC-ComSa</dn>
+	</object>
+	<object class="SaAmfApplication">
+		<dn>safApp=ERIC-ComSa</dn>
+		<attr>
+			<name>saAmfApplicationAdminState</name>
+			<value>1</value>
+		</attr>
+		<attr>
+			<name>saAmfAppType</name>
+			<value>safVersion=1.0.0,safAppType=ERIC-ComSa</value>
+		</attr>
+	</object>
+	<object class="SaAmfSGBaseType">
+		<dn>safSgType=ERIC-ComSa-2N</dn>
+	</object>
+	<object class="SaAmfSUBaseType">
+		<dn>safSuType=ERIC-ComSa-Cmw</dn>
+	</object>
+	<object class="SaAmfSvcBaseType">
+		<dn>safSvcType=ERIC-ComSa-2N</dn>
+	</object>
+	<object class="SaAmfAppType">
+		<dn>safVersion=1.0.0,safAppType=ERIC-ComSa</dn>
+		<attr>
+			<name>saAmfApptSGTypes</name>
+			<value>safVersion=1.0.0,safSgType=ERIC-ComSa-2N</value>
+		</attr>
+	</object>
+	<object class="SaAmfSGType">
+		<dn>safVersion=1.0.0,safSgType=ERIC-ComSa-2N</dn>
+		<attr>
+			<name>saAmfSgtValidSuTypes</name>
+			<value>safVersion=1.0.0,safSuType=ERIC-ComSa-Cmw</value>
+		</attr>
+		<attr>
+			<name>saAmfSgtRedundancyModel</name>
+			<value>1</value>
+		</attr>
+		<attr>
+			<name>saAmfSgtDefSuRestartProb</name>
+			<value>518400000000000</value>
+		</attr>
+		<attr>
+			<name>saAmfSgtDefSuRestartMax</name>
+			<value>1</value>
+		</attr>
+		<attr>
+			<name>saAmfSgtDefCompRestartProb</name>
+			<value>86400000000000</value>
+		</attr>
+		<attr>
+			<name>saAmfSgtDefCompRestartMax</name>
+			<value>1</value>
+		</attr>
+		<attr>
+			<name>saAmfSgtDefAutoRepair</name>
+			<value>1</value>
+		</attr>
+		<attr>
+			<name>saAmfSgtDefAutoAdjustProb</name>
+			<value>10000000</value>
+		</attr>
+		<attr>
+			<name>saAmfSgtDefAutoAdjust</name>
+			<value>0</value>
+		</attr>
+	</object>
+	<object class="SaAmfSG">
+		<dn>safSg=2N,safApp=ERIC-ComSa</dn>
+		<attr>
+			<name>saAmfSGType</name>
+			<value>safVersion=1.0.0,safSgType=ERIC-ComSa-2N</value>
+		</attr>
+		<attr>
+			<name>saAmfSGSuHostNodeGroup</name>
+			<value>safAmfNodeGroup=SCs,safAmfCluster=myAmfCluster</value>
+		</attr>
+		<attr>
+			<name>saAmfSGNumPrefStandbySUs</name>
+			<value>0</value>
+		</attr>
+		<attr>
+			<name>saAmfSGNumPrefInserviceSUs</name>
+			<value>1</value>
+		</attr>
+		<attr>
+			<name>saAmfSGNumPrefActiveSUs</name>
+			<value>1</value>
+		</attr>
+		<attr>
+			<name>saAmfSGAutoRepair</name>
+			<value>0</value>
+		</attr>
+		<attr>
+			<name>saAmfSGAutoAdjust</name>
+			<value>0</value>
+		</attr>
+		<attr>
+			<name>saAmfSGAdminState</name>
+			<value>1</value>
+		</attr>
+	</object>
+	<object class="SaAmfSI">
+		<dn>safSi=2N,safApp=ERIC-ComSa</dn>
+		<attr>
+			<name>saAmfSvcType</name>
+			<value>safVersion=1.0.0,safSvcType=ERIC-ComSa-2N</value>
+		</attr>
+		<attr>
+			<name>saAmfSIRank</name>
+			<value>1</value>
+		</attr>
+		<attr>
+			<name>saAmfSIProtectedbySG</name>
+			<value>safSg=2N,safApp=ERIC-ComSa</value>
+		</attr>
+		<attr>
+			<name>saAmfSIPrefStandbyAssignments</name>
+			<value>0</value>
+		</attr>
+		<attr>
+			<name>saAmfSIPrefActiveAssignments</name>
+			<value>1</value>
+		</attr>
+		<attr>
+			<name>saAmfSIAdminState</name>
+			<value>1</value>
+		</attr>
+	</object>
+	<object class="SaAmfSUType">
+		<dn>safVersion=1.0.0,safSuType=ERIC-ComSa-Cmw</dn>
+		<attr>
+			<name>saAmfSutProvidesSvcTypes</name>
+			<value>safVersion=1.0.0,safSvcType=ERIC-ComSa-2N</value>
+		</attr>
+		<attr>
+			<name>saAmfSutIsExternal</name>
+			<value>0</value>
+		</attr>
+		<attr>
+			<name>saAmfSutDefSUFailover</name>
+			<value>1</value>
+		</attr>
+	</object>
+	<object class="SaAmfSvcType">
+		<dn>safVersion=1.0.0,safSvcType=ERIC-ComSa-2N</dn>
+	</object>
+	<object class="SaAmfCSI">
+		<dn>safCsi=2N,safSi=2N,safApp=ERIC-ComSa</dn>
+		<attr>
+			<name>saAmfCSType</name>
+			<value>safVersion=1.0.0,safCSType=ERIC-ComSa-2N</value>
+		</attr>
+	</object>
+	<object class="SaAmfSU">
+		<dn>safSu=Cmw1,safSg=2N,safApp=ERIC-ComSa</dn>
+		<attr>
+			<name>saAmfSUType</name>
+			<value>safVersion=1.0.0,safSuType=ERIC-ComSa-Cmw</value>
+		</attr>
+		<attr>
+			<name>saAmfSURank</name>
+			<value>1</value>
+		</attr>
+		<attr>
+			<name>saAmfSUHostNodeOrNodeGroup</name>
+			<value>safAmfNode=SC-1,safAmfCluster=myAmfCluster</value>
+		</attr>
+		<attr>
+			<name>saAmfSUFailover</name>
+			<value>1</value>
+		</attr>
+		<attr>
+			<name>saAmfSUAdminState</name>
+			<value>1</value>
+		</attr>
+	</object>
+	<object class="SaAmfSutCompType">
+		<dn>safMemberCompType=safVersion=@cba_com-sa_rstate@\,safCompType=ERIC-ComSa-Cmw,safVersion=1.0.0,safSuType=ERIC-ComSa-Cmw</dn>
+		<attr>
+			<name>saAmfSutMinNumComponents</name>
+			<value>1</value>
+		</attr>
+	</object>
+	<object class="SaAmfSvcTypeCSTypes">
+		<dn>safMemberCSType=safVersion=1.0.0\,safCSType=ERIC-ComSa-2N,safVersion=1.0.0,safSvcType=ERIC-ComSa-2N</dn>
+	</object>
+	<object class="SaAmfComp">
+		<dn>safComp=Cmw,safSu=Cmw1,safSg=2N,safApp=ERIC-ComSa</dn>
+		<attr>
+			<name>saAmfCompType</name>
+			<value>safVersion=@cba_com-sa_rstate@,safCompType=ERIC-ComSa-Cmw</value>
+		</attr>
+	</object>
+	<object class="SaAmfCompCsType">
+		<dn>safSupportedCsType=safVersion=1.0.0\,safCSType=ERIC-ComSa-2N,safComp=Cmw,safSu=Cmw1,safSg=2N,safApp=ERIC-ComSa</dn>
+	</object>
+</imm:IMM-contents>

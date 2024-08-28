@@ -1,0 +1,97 @@
+This README file is:
+
+-for defining the usage of the com_sa_log.cfg file.
+-for describing how to use "replicatedlist maxsize" config in "coremw-com-sa.cfg"
+
+---------------------------------------------------------------
+com_sa_log.cfg
+---------------------------------------------------------------
+PURPOSE:
+The purpose of the com_sa_log.cfg file is to allow the configuration of a number of parameters controlling the behaviour of Alarm and Alert Log Service.
+
+CONFIGURABLE PARAMETERS:
+The following parameters can be configured using this com_sa_log.cfg file:
+AlarmLogFileName
+AlertLogFileName
+AlarmFilesRotated
+AlertFilesRotated
+AlarmMaxLogFileSize
+AlertMaxLogFileSize
+
+AlarmLogFileName defines the first part of the file name of Alarm Log Files. The second part of the file name is completed automatically based on the date and time of the creation of the file.
+AlertLogFileName defines the first part of the file name of Alert Log Files. The second part of the file name is completed automatically based on the date and time of the creation of the file.
+AlarmFilesRotated defines the maximum number of Alarm Log files kept in the file system. When the maximum number of files is reached a log rotation mechanism activates and the oldest Alarm Log file is deleted at the creation of a new Alarm Log file.
+AlertFilesRotated defines the maximum number of Alert Log files kept in the file system. When the maximum number of files is reached a log rotation mechanism activates and the oldest Alert Log file is deleted at the creation of a new Alert Log file.
+AlarmMaxLogFileSize defines the maximun size of an Alarm Log File. When the log file reaches the maximum size, a new Alarm log file is created and the new logs are directed in the new log file.
+AlertMaxLogFileSize defines the maximun size of an Alert Log File. When the log file reaches the maximum size, a new Alert log file is created and the new logs are directed in the new log file.
+
+SYNTAX:
+In order to define a parameter in the com_sa_log.cfg file, write the name of the parameter to be defined on a new line, followed by the "=" sign and the desired new value.
+Example:
+AlarmLogFileName=AlarmTestLog
+
+USAGE:
+After modifying the com_sa_log.cfg file, in order to activate the changes, the COM process needs to be restarted on the system controller that has the active instance of COM SA.
+To find out which controller has the active instance of COM SA use the following commands:
+amf-state csiass ha 'safCSIComp=safComp=Cmw\,safSu=Cmw1\,safSg=2N\,safApp=ERIC-ComSa,safCsi=2N,safSi=2N,safApp=ERIC-ComSa'
+amf-state csiass ha 'safCSIComp=safComp=Cmw\,safSu=Cmw2\,safSg=2N\,safApp=ERIC-ComSa,safCsi=2N,safSi=2N,safApp=ERIC-ComSa'
+If the first command returns "saAmfCSICompHAState=ACTIVE(1)" then the first SC has the active instance of COM SA
+If the second command returns "saAmfCSICompHAState=ACTIVE(1)" then the second SC has the active instance of COM SA
+
+In order to restart COM the following command has to be used:
+/opt/com/bin/com.sh restart
+
+EXAMPLE:
+This is an example of the com_sa_log.cfg file with all configurable parameters defined:
+AlarmLogFileName=AlarmTestLog
+AlertLogFileName=AlertTestLog
+AlarmFilesRotated=10
+AlertFilesRotated=10
+AlarmMaxLogFileSize=500000
+AlertMaxLogFileSize=500000
+
+################################################################################################
+################################################################################################
+################################################################################################
+
+------------------------------------------------------------------------------------------------
+This REAMDE describes how to use "replicatedlist maxsize" and "clearAlarmsOnClusterReboot" config
+in "coremw-com-sa.cfg"
+------------------------------------------------------------------------------------------------
+
+------------------------------------------------------------------------------------------------
+1. Usage
+------------------------------------------------------------------------------------------------
+
+Set the value of "replicatedlist maxsize" and "clearAlarmsOnClusterReboot" in config file "coremw-com-sa.cfg".
+- The size must be given in bytes.
+- The value of "clearAlarmsOnClusterReboot" is set to either "true" or "false"(case insensitive).
+------------------------------------------------------------------------------------------------
+2. Example config for "replicatedlist maxsize" and "clearAlarmsOnClusterReboot" in "coremw-com-sa.cfg" file:
+------------------------------------------------------------------------------------------------
+
+<replicatedlist maxsize="25000000" clearAlarmsOnClusterReboot="true"/>
+
+------------------------------------------------------------------------------------------------
+3. Maximum size limitation
+------------------------------------------------------------------------------------------------
+
+The user configured "replicatedlist maxsize" value can be set to any unsigned integer number,
+but it will be used only if it is less then the max size limit, otherwise the max size limit will be used.
+
+The maximum size limit depends on the maximum size of a shared memory segment of the OS (/proc/sys/kernel/shmmax).
+If this system config file is not readable or not providing a valid size, then the default max size will be the max size limit.
+
+The default max size: 2MB (2*1024*1024 bytes).
+
+------------------------------------------------------------------------------------------------
+4. clearAlarmsOnClusterReboot
+------------------------------------------------------------------------------------------------
+The user can configure this parameter to either "true" or "false"(case insensitive).
+
+If this parameter is set to true: AAL will be cleared on node/cluster reboot.
+
+If this parameter is set to false: AAL will be restored on node/cluster reboot.
+
+The default value of this parameter is: true
+

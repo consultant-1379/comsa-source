@@ -1,0 +1,94 @@
+/* -*- c++ -*-
+ *
+ * This file contains information about PMT-SA in doxygen format.
+ */
+
+/**
+   @mainpage Performance Management Transfer Service Agent
+   
+   @ingroup PmtSa
+
+   @section Application Application
+   
+   This is relevant to products based on COM and CoreMW (version 3.0 and
+   higher).  This SA can exist in systems with lower versions than 3.0 of
+   COM or CoreMW, but will not provide any service in that case.  It is
+   required that the Performance Management Services are enabled in the 
+   middleware.
+
+   @section Purpose Purpose
+   
+   The Performance Management Transfer Service Agent, from now on called PMTSA,
+   acts as a Service Provider and delivers Performance Management data events 
+   to a registered listener (COM) for such events.  It provides means for
+   lookup and removal of Performance Management data in the MW.
+   
+   @section Rev Revision History
+   A 2011-12-28 ejonajo - First version
+
+   @section Summary Summary
+   
+   The Performance Management Transfer Service Agent acts like a proxy 
+   between the Performance Management Services provided by the MW and the
+   O&M system.
+
+   @section Overview Overview
+   
+   PMTSA will be loaded into COM when COM starts up, and will then execute
+   on the active COM node.  No execution takes place on the standby node. When
+   PMTSA is executing in active mode it acts as a COM event provider and transfers
+   PM data from the middleware to COM.   
+   
+   PMTSA logs it's execution via the ComMwSpiLog-interface. 
+   
+   @subsection Installation Installation
+
+   PMTSA is installed into the components folder for COM. This is done via
+   installation of the COM-SA component, version 3.0 or higher.  There exists
+   no particular prerequisites for installation of PMTSA, but no extra
+   functionality will be provided unless the underlying middleware provides
+   the OpenSAF PM functionality.
+   
+   No particular configuration is required for PMTSA.  
+   
+   @subsection Loading Loading of PMTSA
+   
+   When COM starts up, it will automatically load all the components found in 
+   the components folder and then invoke the comLCMinit() method.
+   
+   During the comLCMinit() execution, PMTSA will try to load the PM Consumer
+   library from the MW. On success, PMT will register itself in COM as a PM event 
+   provider according to the COM SPI for PM events. If the consumer library isn't
+   found in the MW, PMTSA will register itself as an useless component in COM
+   providing no services. 
+
+   @image html images/PmtSa-01.jpg
+   
+   @subsection Startup Startup of PMTSA
+   
+   When COM calls the pmtsa_start() method, the actual execution of the component
+   starts. PMTSA will once again try to load the dynamic libraries (unless already
+   loaded) that provides the interfaces towards the PM Services in the MW. 
+   
+   If the interfaces are found, then PMTSA will immediately connect to the PM services
+   via a separate thread and then register itself as an event provider for COM,
+   providing PM events defined by the ComOamSpiPm_1 interfaces.  PMTSA will not
+   start providing PM-events until a PM EventConsumer has registered itself.
+   
+   PMTSA will return ComOk to COM even if the PM service interfaces aren't found.
+   It will return ComFailure only when internal errors occurs.
+
+   @section References References
+   
+   TODO: Add some interesting links for the reader
+
+   @section Abbreviations Abbreviations
+   The following abbreviations are used:
+     - CoreMW - Core middle ware
+     - COM - Common Operation and Maintenance
+     - PM - Performance Management
+     - PMTSA - Performance Management Transfer Service Agent
+     - SA - Service Agent
+     - SPI - Service Provider Interface
+
+ */

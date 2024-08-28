@@ -1,0 +1,187 @@
+#!/bin/sh
+# Copyright (C) 2011 by Ericsson AB
+# S - 125 26  STOCKHOLM
+# SWEDEN, tel int + 46 10 719 0000
+#
+# The copyright to the computer program herein is the property of
+# Ericsson AB. The program may be used and/or copied only with the
+# written permission from Ericsson AB, or in accordance with the terms
+# and conditions stipulated in the agreement/contract under which the
+# program has been supplied.
+#
+# All rights reserved.
+
+# Path
+COMSA_DIR=comsa_for_coremw-apr9010555
+
+## PSO API
+PERSISTENT_STORAGE_API="/usr/share/pso/storage-paths"
+PERSISTENT_STORAGE_API_CONFIG="${PERSISTENT_STORAGE_API}/config"
+PERSISTENT_STORAGE_API_CLEAR="${PERSISTENT_STORAGE_API}/clear"
+PERSISTENT_STORAGE_API_SOFTWARE="${PERSISTENT_STORAGE_API}/software"
+PERSISTENT_STORAGE_API_NOBACKUP="${PERSISTENT_STORAGE_API}/no-backup"
+
+CONFIG_REPO=`cat $PERSISTENT_STORAGE_API_CONFIG`
+CLEAR_REPO=`cat $PERSISTENT_STORAGE_API_CLEAR`
+SOFTWARE_REPO=`cat $PERSISTENT_STORAGE_API_SOFTWARE`
+NOBACKUP_REPO=`cat $PERSISTENT_STORAGE_API_NOBACKUP`
+
+MAPDIR=/usr/share/ericsson/cba/id-mapping
+UIDMAPF=${MAPDIR}/uid.map.defs
+GIDMAPF=${MAPDIR}/gid.map.defs
+
+
+#define utilchown
+if ([ -f $UIDMAPF ] && [ -f $GIDMAPF ]) ; then
+    utilchown=$(which chown 2> /dev/null)
+else
+    utilchown=/bin/true
+fi
+
+#Change file permissions and ownership on a single file, or recursively change owner if a folder is passed.
+#which will only apply to files in root primary group (gid=0), otherwise leave alone to speed up AMF instantiation.
+ch_own_mod() {
+    local ch_own_mod_enter=`ls -l -d $4`
+    if [ -f $UIDMAPF ] && [ -f $GIDMAPF ] ; then
+        if [ -f $4 ] ; then
+            $utilchown $2:$3 $4
+            chmod $1 $4
+        fi
+        if [ -d $4 ] ; then
+            files=`find $4 -type f -gid 0`
+            if [ "$files" ] ; then
+                $utilchown $2:$3 $files
+            fi
+        fi
+    fi
+    local ch_own_mod_exit=`ls -l -d $4`
+}
+
+#Change folder permissions and ownership on a single folder
+ch_own_mod_dir() {
+    local ch_own_mod_dir_enter=`ls -l -d $4`
+    if [ -f $UIDMAPF ] && [ -f $GIDMAPF ] ; then
+        if [ ! -d $4 ]; then
+            mkdir -p $4
+        fi
+
+        $utilchown $2:$3 $4
+
+        chmod $1 $4
+
+    fi
+    local ch_own_mod_dir_exit=`ls -l -d $4`
+}
+
+#Change folder permissions and ownership recursively on sub-folders.
+ch_own_mod_dir_recursive() {
+    local ch_own_mod_dir_recursive_enter=`ls -l -d $4`
+    if [ -f $UIDMAPF ] && [ -f $GIDMAPF ] ; then
+        if [ ! -d $4 ]; then
+            mkdir -p $4
+        fi
+
+        #Recursive chown on folders
+        $utilchown $2:$3 $(find $4 -type d)
+
+        #Recursive chmod on folders
+        chmod $1 $(find $4 -type d)
+
+    fi
+    local ch_own_mod_dir_recursive_exit=`ls -l -d $4`
+}
+
+create_comsa_dirs_set_permissions() {
+    logger "create_comsa_dirs_set_permissions() called"
+    # Save umask so that it can be restored later
+    save_umask=`umask`
+
+    # Set umask to 027
+    umask 027
+
+    logger "set permissions and ownership on COMSA"
+    ch_own_mod_dir 750 root com-core /opt/com/util
+    ch_own_mod_dir_recursive 770 com-core com-core /var/opt/comsa
+    ch_own_mod_dir_recursive 750 com-core com-core /home/comsa
+    ch_own_mod_dir_recursive 770 root com-core $CONFIG_REPO/$COMSA_DIR
+    ch_own_mod_dir_recursive 750 com-core com-core $SOFTWARE_REPO/$COMSA_DIR
+    ch_own_mod_dir_recursive 770 root com-core $CLEAR_REPO/$COMSA_DIR
+    ch_own_mod_dir_recursive 750 com-core com-core $NOBACKUP_REPO/$COMSA_DIR
+    ch_own_mod_dir_recursive 750 com-core com-core /usr/share/com-core
+    ch_own_mod_dir 770 cmw-core system-nbi-data $NOBACKUP_REPO/coremw/var/log/saflog/FaultManagementLog
+    ch_own_mod_dir 770 cmw-core system-nbi-data $NOBACKUP_REPO/coremw/var/log/saflog/FaultManagementLog/alarm
+    ch_own_mod_dir 770 cmw-core system-nbi-data $NOBACKUP_REPO/coremw/var/log/saflog/FaultManagementLog/alert
+
+    logger "set permissions and ownership on COMSA files"
+    ch_own_mod 755 root com-core /usr/bin/comsa-mim-tool
+    ch_own_mod 755 root com-core /usr/bin/restart-com
+    ch_own_mod 755 root com-core /usr/bin/comsa_pso
+    ch_own_mod 755 root com-core /usr/bin/is-com-sshd-flag-enabled.sh
+    ch_own_mod 755 root com-core /usr/bin/update_sshd
+    ch_own_mod 755 root com-core /usr/bin/comsa_storage
+    ch_own_mod 755 root com-core /opt/com/util/comsa_mdf_consumer
+    ch_own_mod 755 root com-core /opt/com/util/com_offline_model_consumer
+    ch_own_mod 640 root com-core /opt/com/lib/comp/coremw-com-sa.cfg
+    ch_own_mod 640 root com-core /opt/com/lib/comp/coremw-com-sa.so
+    ch_own_mod 640 root com-core /opt/com/lib/comp/coremw-pmt-sa.so
+    ch_own_mod 640 com-core com-core /opt/com/lib/comsa_tp.so
+    ch_own_mod 640 root com-core /opt/com/etc/com_sa_trace.conf
+    ch_own_mod 640 root com-core /opt/com/etc/com_sa_log.cfg
+    ch_own_mod 640 root com-core /opt/com/etc/comsa.cfg
+
+    if [ -f /var/opt/comsa/comsa.trc ] ; then
+        ch_own_mod 660 root com-core /var/opt/comsa/comsa.trc
+    fi
+    if [ -f /var/opt/comsa/pmtsa.trc ] ; then
+        ch_own_mod 660 root com-core /var/opt/comsa/pmtsa.trc
+    fi
+
+    if [ -f $CLEAR_REPO/$COMSA_DIR/ComSA_handles_SSHD ] ; then
+        ch_own_mod 660 root com-core $CLEAR_REPO/$COMSA_DIR/ComSA_handles_SSHD
+    fi
+
+    ch_own_mod 660 root com-core $CLEAR_REPO/$COMSA_DIR/com_sa_log.cfg
+    ch_own_mod 660 root com-core $CLEAR_REPO/$COMSA_DIR/com_sa_trace.conf
+    ch_own_mod 660 root com-core $CONFIG_REPO/$COMSA_DIR/etc/comsa.cfg
+
+    logger "set recursive ownership on files under COMSA storage folders"
+    ch_own_mod 660 root com-core $CONFIG_REPO/$COMSA_DIR
+    ch_own_mod 660 com-core com-core $CLEAR_REPO/$COMSA_DIR/rplist
+
+    echo "umask 027" > /usr/share/com-core/.bashrc
+    ch_own_mod 640 com-core com-core /usr/share/com-core/.bashrc
+
+    logger "create_comsa_dirs_set_permissions() completed"
+    # Restore umask
+    umask $save_umask
+}
+
+case $1 in
+"create_comsa_dirs_set_permissions")
+   create_comsa_dirs_set_permissions
+    ;;
+"ch_own_mod")
+    test -n "$2" || die "No permission specified"
+    test -n "$3" || die "No user specified"
+    test -n "$4" || die "No group specified"
+    test -n "$5" || die "No file specified"
+    ch_own_mod $2 $3 $4 $5
+    ;;
+"ch_own_mod_dir")
+    test -n "$2" || die "No permission specified"
+    test -n "$3" || die "No user specified"
+    test -n "$4" || die "No group specified"
+    test -n "$5" || die "No file specified"
+    ch_own_mod_dir $2 $3 $4 $5
+    ;;
+"")
+    info "sub-command must be specified"
+    info "usage: $NAME [create_comsa_dirs_set_permissions|ch_own_mod_dir|ch_own_mod]"
+    exit 1
+    ;;
+*)
+    info "unknown command"
+    exit 1
+    ;;
+esac
+exit 0

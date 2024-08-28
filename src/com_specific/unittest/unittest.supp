@@ -1,0 +1,93 @@
+{
+   __tracepoints__init
+   Memcheck:Leak
+   ...
+   fun:calloc
+   fun:_dlerror_run
+   fun:dlopen@@GLIBC_2.2.5
+   fun:__tracepoints__init
+   fun:__libc_csu_init
+   fun:(below main)
+}
+{
+   __tracepoints__ptrs_init
+   Memcheck:Leak
+   ...
+   fun:malloc
+   fun:_dl_signal_error
+   fun:_dl_open
+   fun:dlopen_doit
+   fun:_dl_catch_error
+   fun:_dlerror_run
+   fun:dlopen@@GLIBC_2.2.5
+   fun:__tracepoints__ptrs_init
+   fun:__libc_csu_init
+   fun:(below main)
+}
+{
+   __registerClass__
+   Memcheck:Value8
+   fun:strlen
+   fun:strdup
+   ...
+   fun:_Z13registerClassPKcS0_
+   ...
+}
+{
+   __registerClass__
+   Memcheck:Cond
+   fun:is_overlap
+   fun:__GI_memcpy
+   ...
+   fun:_Z13registerClassPKcS0_
+   ...
+}
+{
+   __unregisterClass___
+   Memcheck:Value8
+   fun:strcmp
+   ...
+   fun:_Z15unregisterClassPKcS0_
+   ...
+}
+{
+   __registerClass__
+   Memcheck:Value8
+   fun:__GI_memcpy
+   ...
+   fun:_Z13registerClassPKcS0_
+   ...
+}
+{
+   __unregisterClass__
+   Memcheck:Value8
+   fun:__GI_strcmp
+   ...
+   fun:_Z15unregisterClassPKcS0_
+   ...
+}
+{
+   __registerDN__
+   Memcheck:Value8
+   fun:strlen
+   fun:strdup
+   ...
+   fun:_Z10registerDnPKcS0_
+   ...
+}
+{
+   __registerDN__
+   Memcheck:Value8
+   fun:__GI_memcpy
+   ...
+   fun:_Z10registerDnPKcS0_
+   ...
+}
+{
+   __unregisterDN__
+   Memcheck:Value8
+   fun:__GI_strcmp
+   ...
+   fun:_Z12unregisterDnPKcS0_
+   ...
+}

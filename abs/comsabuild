@@ -1,0 +1,422 @@
+#! /bin/sh
+##
+## comsabuild
+##
+##   Build script for COM_SA for CoreMW.
+##
+## Environment;
+##   $SA_VERSION - Used for Revision of non-release builds, e.g 'comsabuild all'
+##   $CURRENT_GIT_BRANCH -  Used for RPM release tag for non-release builds.
+##   $COM_SA_DEV - (COMSA GIT REPO/dev) The COM_SA development structure.
+##   $COM_SA_CXPA - (COMSA GIT REPO/release/cxp_archive) The results go here.
+##
+## Related files;
+##
+##   APR   -   (COMSA GIT REPO/abs/APR) The revision of the product
+##                     used only for Release builds 'correctionpackage'/'shipment'
+##
+## Commands;
+##
+prg=$(basename $0)
+dir=$(dirname $0); dir=$(cd $dir; pwd)
+tmp=$(mktemp -td ${prg}_XXXXXX)
+
+cd $dir
+
+die() {
+    echo "ERROR: $*" >&2
+    rm -rf $tmp
+    exit 1
+}
+help() {
+    grep '^##' $0 | cut -c3-
+    rm -rf $tmp
+    exit 0
+}
+test -n "$1" || help
+echo "$1" | grep -qi "help" && help
+# -------------------
+# Repository location
+# -------------------
+COM_SA_DEV=${COM_SA_DEV:-$GIT_REPO_DIR/dev}
+COM_SA_SRC=${COM_SA_SRC:-$GIT_REPO_DIR/dev/src}
+COM_SA_CXPA=${COM_SA_CXPA:-$GIT_REPO_DIR/release/cxp_archive}
+
+# --------------------------------------
+# CXP Product numbers used in packaging
+# --------------------------------------
+sles_sdp_product_num=CXP9017697
+sles_rt_product_num=CXP9018914
+sles_depl_product_num=CXP9017695
+sles_sdp_cxp=CXP9017697_4
+sles_rt_cxp=CXP9018914_4
+sles_depl_cxp=CXP9017695_4
+
+# The following RHEL Product numbers are to be used.
+# CXP 902 8073/1 COMSA for CoreMW X86_64 RHEL
+# CXP 902 8074/1 COMSA for CoreMW_X86_64 RHEL Runtime
+# CXP 902 8075/1 COMSA for CoreMW_X86_64 RHEL Deployment Template
+
+rhel_sdp_product_num=CXP9028073
+rhel_rt_product_num=CXP9028074
+rhel_depl_product_num=CXP9028075
+rhel_sdp_cxp=CXP9028073_1
+rhel_rt_cxp=CXP9028074_1
+rhel_depl_cxp=CXP9028075_1
+
+latest_sles_distro=sle12
+latest_rhel_distro=el6
+
+cay_id=CAY901203_1
+yocto_id=CAY901202_1
+caa_id=CAA9012642_4
+apr_id=APR9010555_4
+
+#UUID configuration file
+uuidcf=$COM_SA_DEV/src/com_specific/sdp/comsa.cfg
+
+#Revision file names
+tmp_version_file=$COM_SA_DEV/abs/tmp_version
+apr_file=$COM_SA_DEV/abs/APR
+
+# -----------------------------------------------------------
+# Outputs - Naming to use for created packages in cxp_archive
+# -----------------------------------------------------------
+prefix=COM_SA
+name_prefix="COM_SA_for_CoreMW-"
+cay_name=${prefix}_for_CoreMW-$cay_id
+
+sles_rt_name=${prefix}_RUNTIME-$sles_rt_cxp
+sles_depl_name=${prefix}_D_TEMPLATE-$sles_depl_cxp
+rhel_rt_name=${prefix}_RUNTIME-$rhel_rt_cxp
+rhel_depl_name=${prefix}_D_TEMPLATE-$rhel_depl_cxp
+
+yocto_sdp_name=$COM_SA_CXPA/${name_prefix}${yocto_id}.tar.gz
+
+# Generate finalize_release script to provide git instructions for user during build.
+cmd_generate_final_release_script() {
+   APR_VERSION=$(cat $apr_file)
+   RELEASE_FILE=$COM_SA_DEV/abs/finalize_release.sh
+
+   echo "#! /bin/csh" > $RELEASE_FILE
+   echo "echo \"Please finish this sentence\"" >> $RELEASE_FILE
+   echo "echo \"I am about to release comsa4. ...... example [0_sh01 | 0_pra | 0_cp01]\"" >> $RELEASE_FILE
+   echo "set version = $<" >> $RELEASE_FILE
+   echo "echo \"Is this correct: comsa4.\"$""version\"  ((yes)ENTER / (no)CTRL+C) note that includes the format (two digits revision)\"" >> $RELEASE_FILE
+   echo "set response = $<" >> $RELEASE_FILE
+   echo "echo \"Please squash all your commits into one message\"" >> $RELEASE_FILE
+   echo "echo \"Then please run the following commands manually (this will be automated in the future)\"" >> $RELEASE_FILE
+   echo "echo ..." >> $RELEASE_FILE
+   echo "echo \"git add $COM_SA_DEV/deployment_templates/U1/package_instruction_comsa.txt"\" >> $RELEASE_FILE
+   echo "echo \"git add $apr_file\"" >> $RELEASE_FILE
+   echo "echo \"git add $COM_SA_DEV/abs/meta-comsa/recipes-comsa/com-sa/com-sa.bb\"" >> $RELEASE_FILE
+   echo "echo 'git commit -m \"Created release version of comsa4.'\"$""version\""'\"' >> $RELEASE_FILE
+   echo "echo \"git tag \"comsa4.\"$""version\"\"\"" >> $RELEASE_FILE
+   echo "echo \"git tag $apr_id"_"$APR_VERSION\"" >> $RELEASE_FILE
+   echo "echo \"git tag $caa_id"_"$APR_VERSION\"" >> $RELEASE_FILE
+   echo "echo \"git tag $APR_VERSION\"" >> $RELEASE_FILE
+   echo "echo ..." >> $RELEASE_FILE
+   echo "echo \"And push for review\"" >> $RELEASE_FILE
+   echo "echo \"git push origin HEAD:refs/for/master --tags\"" >> $RELEASE_FILE
+   echo "echo ..." >> $RELEASE_FILE
+   echo "echo \"Finally you need to set the following tags in the verification repository before the release is done\"" >> $RELEASE_FILE
+   echo "echo \"git tag \"comsa4.\"$""version\"\"\"" >> $RELEASE_FILE
+   echo "echo \"git tag $apr_id"_"$APR_VERSION\"" >> $RELEASE_FILE
+   echo "echo \"git tag $caa_id"_"$APR_VERSION\"" >> $RELEASE_FILE
+   echo "echo \"git tag $APR_VERSION\"" >> $RELEASE_FILE
+   echo "echo ..." >> $RELEASE_FILE
+   echo "echo \"You need to push the verification tags to remote.\"" >> $RELEASE_FILE
+   echo "echo \"git push origin \"comsa4.\"$""version\"\" $APR_VERSION  $caa_id"_"$APR_VERSION $apr_id"_"$APR_VERSION\" " >> $RELEASE_FILE
+   echo "echo ..." >> $RELEASE_FILE
+   echo "echo \"Now take everything you have built under ../release/cxp_archive and copy to ITHub for LCT and LUT testing\"" >> $RELEASE_FILE
+   echo "echo \"And also extract COM_SA_D_TEMPLATE and copy the UBFU Upgrade SDP to this folder for LUT testing.\"" >> $RELEASE_FILE
+   echo "echo \"Finally change permissions on folder and BACKUP THE FOLDER somewhere else!\"" >> $RELEASE_FILE
+   echo "echo ..." >> $RELEASE_FILE
+   echo "echo \"Don't forget to merge in master in to the dev if you created a shipment. Create a branch tracking comsa_dev:\"" >> $RELEASE_FILE
+   echo "echo \"git merge origin/master --no-ff\"" >> $RELEASE_FILE
+   echo "echo \"git rebase -i  (reword)\"" >> $RELEASE_FILE
+   echo "echo \"git push origin HEAD:refs/for/comsa_dev\"" >> $RELEASE_FILE
+   echo "echo ..." >> $RELEASE_FILE
+   echo "rm -f finalize_release.sh" >> $RELEASE_FILE
+   chmod +x $RELEASE_FILE
+}
+
+next_ver() {
+    legal_vers="ABCDEFGHJKLMNSTUVXYZ"
+    #m=$(echo $1 | cut -c4- | sed -e 's/^0//')
+    #echo $1
+    #echo $m
+    m=$(echo $1 | cut -c4-)
+    m=`expr $m + 1`
+    #m=$((m+1))
+    if test $m -lt 1000; then
+        p=$(echo $1 | cut -c-3)
+        s=$(printf "%03d" $m)
+        echo "$p$s"
+        return 0
+    fi
+    m=$(echo $1 | cut -c3)
+    m=$(echo $legal_vers | grep -o "${m}[A-Z]" | cut -c2)
+    test -n "$m" || m=A
+    echo "P1${m}01"
+}
+
+cmd_step_build() {
+    local release_version=$1
+    if ! test -r $release_version; then
+        echo "R1A01" > $release_version
+        echo " using default:R1A01"
+        return 0
+    fi
+    ver=$(cat $release_version)
+    echo " Read in: $ver"
+    if ! echo "$ver" | grep -q -e '^R[0-9]*[A-Z][0-9][0-9]$'; then
+        # File corrupted
+        echo "R1A01" > $release_version
+        echo " corrupted file, using:R1A01"
+        return 0
+    fi
+    m=$(echo $ver | cut -c4- | sed -e 's/^[A-Z]//' | sed -e 's/^0//')
+    m=$((m+1))
+    p=$(echo $ver | cut -c-4 | sed -e 's/[0-9]$//')
+    s=$(printf "%02d" $m)
+    ver="$p$s"
+    echo $ver > $1
+    echo " Stepping to:$ver"
+}
+
+# The letters I, O, P, Q, R, and W must not be used.
+cmd_step_rev() {
+    legal_vers="ABCDEFGHJKLMNSTUVXYZ"
+    local release_version=$1
+    if ! test -r $release_version; then
+        echo "R1A01" > $release_version
+        echo " using default:R1A01"
+        return 0
+    fi
+    ver=$(cat $release_version)
+    echo " Read in: $ver"
+    if ! echo "$ver" | grep -q -e '^R[0-9]*[A-Z][0-9][0-9]$'; then
+        # File corrupted
+        echo "R1A01" > $release_version
+        echo " corrupted file, using:R1A01"
+        return 0
+    fi
+    m=$(echo $ver | cut -c4- | sed -e 's/^0//')
+    p=$(echo $ver | cut -c-3 | sed -e 's/[A-Z]$//' )
+    m=$(echo $ver | cut -c 2- | sed -e 's/[0-9]*//g' )
+    m=$(echo $legal_vers | grep -o "${m}[A-Z]" | cut -c2)
+    test -n "$m" || m=A
+    ver="$p${m}01"
+    echo $ver > $1
+    echo " Stepping to:$ver"
+}
+
+##  get_tmp_version
+##     Get the next temporary version.
+##
+cmd_get_tmp_version() {
+    tmp_version=$dir/tmp_version
+    if ! test -r $tmp_version; then
+        echo "P1A001" > $tmp_version
+        echo "P1A001"
+        return 0
+    fi
+    ver=$(cat $tmp_version)
+    if ! echo "$ver" | grep -q -e '^P[1-9][A-Z][0-9][0-9][0-9]$'; then
+        # File corrupted
+        echo "P1A001" > $tmp_version
+        echo "P1A001"
+        return 0
+    fi
+    ver=$(next_ver $ver)
+    echo $ver > $tmp_version
+    echo $ver
+}
+
+##  get_version <SLES_SDP|SLES_RUNTIME|SLES_DEPLOYMENT|RHEL_SDP|RHEL_RUNTIME|RHEL_DEPLOYMENT> real_flag
+##     Get the Ericsson revision for different items. This is intended to be called during the build.
+##     pass any arg for $2, e.g "real" to obtain the official release revision, otherwise p-revision.
+##
+cmd_get_version() {
+    test -n "$1" || die "Parameter missing"
+
+    if ! `test -n "$2"`; then
+        cat $tmp_version_file
+        return 0
+    fi
+
+    case "$1" in
+        SLES_SDP|SLES_RUNTIME|SLES_DEPLOYMENT)
+            cat $apr_file
+            ;;
+        RHEL_SDP|RHEL_RUNTIME|RHEL_DEPLOYMENT)
+            cat $apr_file
+            ;;
+        *)
+            die "Invalid parameter [$1]"
+    esac
+}
+
+##  build_receipt
+##    Build the receipt tar file (yocto)
+##
+cmd_build_receipt() {
+
+    if test -r "$yocto_sdp_name"; then
+        test -w "$yocto_sdp_name" || die "Not writable [$yocto_sdp_name]"
+    else
+        touch "$yocto_sdp_name" > /dev/null 2>&1 || die "Can't create [$yocto_sdp_name]"
+    fi
+    mkdir $tmp/r_tar/
+    mkdir $tmp/r_tar/${yocto_id}
+    cp -r $COM_SA_DEV/abs/meta-comsa $tmp/r_tar/${yocto_id}
+    cp $COM_SA_DEV/abs/README $tmp/r_tar/${yocto_id}
+    tar -C $tmp/r_tar -czf $yocto_sdp_name ${yocto_id} || die "Tar failed"
+    echo "Created [$yocto_sdp_name]"
+}
+
+
+##  get_source [output-file]
+##     Get the source for a release.
+##
+cmd_get_source() {
+
+    cay_tar=${1:-$COM_SA_CXPA/$cay_name.tar.gz}
+    if test -r "$cay_tar"; then
+        test -w "$cay_tar" || die "Not writable [$src_tar]"
+    else
+        touch "$cay_tar" > /dev/null 2>&1 || die "Can't create [$cay_tar]"
+    fi
+    cp $COM_SA_DEV/abs/README $COM_SA_DEV/
+    tar -C $COM_SA_DEV -czf $cay_tar src dependencies README || die "Tar failed"
+    rm -rf $COM_SA_DEV/README
+    echo "Created [$cay_tar]"
+}
+
+full_build() {
+    echo "Create packages ..."
+    cmd_build_receipt || exit 1
+    cmd_get_source > /dev/null | exit 1
+
+    # Sleep before exiting so ntf drive has time to finish writing before any automated copying is done, needed to make some testcases more stable
+    sleep 10
+
+    echo ""
+    echo ""
+    echo "Result in [$COM_SA_CXPA]"
+    echo ""
+}
+
+
+##  all
+##     Build all.
+##
+cmd_all() {
+    test -r "$COM_SA_DEV/src/Makefile" || die "Can't find COM_SA Makefile"
+    cmd_clean
+    cd $COM_SA_DEV/src
+    echo "Building ..."
+    cmd_get_tmp_version
+    SA_VERSION=$(cat $tmp_version_file)
+    if ! make > $tmp/make_output 2>&1; then
+        cat $tmp/make_output
+        die "Failed to build COM_SA for SLES"
+    fi
+    if ! make rhel_rpm > $tmp/make_output 2>&1; then
+        cat $tmp/make_output
+        die "Failed to build COM_SA for RHEL"
+    fi
+    full_build
+    cp $tmp_version_file $COM_SA_CXPA/version.tmp
+}
+##  shipment
+##     Build shipment, revision stepper is used to step build in APR.
+##
+cmd_shipment() {
+    echo "Have you already merged from origin/comsa_dev branch?"
+    echo "If YES, proceed with the shipment."
+    echo "If NOT, wait for this script to complete, run the abort_release.sh script, do the merge and build again."
+    cmd_clean
+    test -r "$COM_SA_DEV/src/Makefile" || die "Can't find COM_SA Makefile"
+    cd $COM_SA_DEV/src
+    echo "Building shipment ..."
+    PREV_VERSION=$(cat $apr_file)
+    echo "Stepping APR:"
+    cmd_step_build $apr_file
+    NEXT_VERSION=$(cat $apr_file)
+    sed -i "s/$PREV_VERSION/$NEXT_VERSION/g" $COM_SA_DEV/abs/meta-comsa/recipes-comsa/com-sa/com-sa.bb
+    sleep 1
+    SA_VERSION=$(cat $apr_file)
+    if ! make > $tmp/make_output 2>&1; then
+        cat $tmp/make_output
+        die "Failed to build COM_SA for SLES"
+    fi
+    if ! make rhel_rpm > $tmp/make_output 2>&1; then
+        cat $tmp/make_output
+        die "Failed to build COM_SA for RHEL"
+    fi
+    full_build "real"
+    cmd_generate_final_release_script "sh"
+    cp $apr_file $COM_SA_CXPA/version.tmp
+}
+
+##  correctionpackage
+##     Build a correctionpackage release, revision stepper is used to step revision in APR.
+##
+cmd_correctionpackage() {
+    cmd_clean
+    test -r "$COM_SA_DEV/src/Makefile" || die "Can't find COM_SA Makefile"
+    cd $COM_SA_DEV/src
+    echo "Building correction package..."
+    PREV_VERSION=$(cat $apr_file)
+    echo "Stepping APR revision:"
+    cmd_step_rev $apr_file
+    NEXT_VERSION=$(cat $apr_file)
+    if [ -f $COM_SA_DEV/abs/meta-comsa/recipes-comsa/com-sa/com-sa.bb ]; then
+        sed -i "s/$PREV_VERSION/$NEXT_VERSION/g" $COM_SA_DEV/abs/meta-comsa/recipes-comsa/com-sa/com-sa.bb
+    fi
+    sleep 1
+    SA_VERSION=$(cat $apr_file)
+    if ! make > $tmp/make_output 2>&1; then
+        cat $tmp/make_output
+        die "Failed to build COM_SA for SLES"
+    fi
+    if ! make rhel_rpm > $tmp/make_output 2>&1; then
+        cat $tmp/make_output
+        die "Failed to build COM_SA for RHEL"
+    fi
+    full_build "real"
+    cmd_generate_final_release_script "cp"
+    cp $apr_file $COM_SA_CXPA/version.tmp
+}
+
+##  clean
+##     Clean up.
+##
+cmd_clean() {
+    test -r "$COM_SA_DEV/src/Makefile" || die "Can't find COM_SA Makefile"
+    cd $COM_SA_DEV/src
+    make clean > $tmp/make_output 2>&1 || cat $tmp/make_output
+    rm -f $COM_SA_CXPA/${prefix}_D_TEMPLATE-${sles_depl_product_num}_*.tar.gz*\
+        $COM_SA_CXPA/${prefix}_D_TEMPLATE-${rhel_depl_product_num}_*.tar.gz*\
+        $COM_SA_CXPA/*.tmp \
+        $COM_SA_CXPA/${prefix}_RUNTIME-${sles_rt_product_num}_*.tar* $COM_SA_DEV/release/ComSa-${sles_sdp_product_num}_*.sdp* \
+        $COM_SA_CXPA/${prefix}_RUNTIME-${rhel_rt_product_num}_*.tar* $COM_SA_DEV/release/ComSa-${rhel_sdp_product_num}_*.sdp* \
+        $COM_SA_CXPA/${name_prefix}${yocto_id}.tar.gz* \
+        $COM_SA_DEV/release/ComSa_install.sdp* $COM_SA_CXPA/$cay_name.tar.gz* > /dev/null 2>&1
+}
+
+# Get the command
+cmd=$1
+shift
+grep -q "^cmd_$cmd()" $0 || die "Invalid command [$cmd]"
+
+# Execute command
+trap "die Interrupted" INT TERM
+mkdir -p $tmp
+cmd_$cmd "$@"
+status=$?
+rm -rf $tmp
+exit $status
+

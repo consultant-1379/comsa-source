@@ -1,0 +1,37 @@
+# Eclipse project files
+.cproject
+.project
+
+# Temprary files
+*~
+
+# COM SA release folder
+release/cxp_archive/*
+
+# COM SA build folder
+release/*
+
+# Unittest build folders
+src/com_specific/unittest/DepsAndObjs/*
+src/com_specific/unittest/gmock-1.6.0/*
+src/com_specific/unittest/gmock-1.7.0/*
+
+# Unittest code coverage results
+src/com_specific/unittest/*.info
+src/com_specific/unittest/html_ut
+
+# Unittest valgrind logs
+src/com_specific/unittest/valgrind_logs
+
+# Unittest binaries
+src/com_specific/unittest/Unittest*
+src/com_specific/unittest/pmt_sa.mock
+
+# Code coverage files and directories
+src/com_specific/unittest/comsa_ut_cov*
+src/com_specific/unittest/html_ut
+
+
+# Function test temporary python files
+*$py.class
+.metadata*

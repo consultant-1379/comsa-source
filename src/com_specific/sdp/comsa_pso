@@ -1,0 +1,453 @@
+#!/bin/sh
+##
+## Copyright (c) 2011Ericsson AB, 2010 - 2011.
+##
+## All Rights Reserved. Reproduction in whole or in part is prohibited
+## without the written consent of the copyright owner.
+##
+## ERICSSON MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE
+## SUITABILITY OF THE SOFTWARE, EITHER EXPRESS OR IMPLIED, INCLUDING
+## BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY,
+## FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT. ERICSSON
+## SHALL NOT BE LIABLE FOR ANY DAMAGES SUFFERED BY LICENSEE AS A
+## RESULT OF USING, MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS
+## DERIVATIVES.
+##
+## Author: efaiami
+## Modify: xanhdao 2013-11-18   MR28452: stop deliver IMM related Model for COM
+## Modify: xadaleg 2015-04-16   MR36131: Processes should execute with least required privilegeS
+## Modify: xadaleg 2015-07-17   MR42277: Remove old interfaces and models
+## Modify: xtronle 2015-07-25   MR40724: CBA offline installable RPMs for VNF image creation
+##
+
+COMSA_DIR="/comsa_for_coremw-apr9010555"
+
+sdpname=$2
+NAME=$(basename $0)
+
+## PSO API
+PERSISTENT_STORAGE_API="/usr/share/pso/storage-paths"
+PERSISTENT_STORAGE_API_CONFIG="${PERSISTENT_STORAGE_API}/config"
+PERSISTENT_STORAGE_API_CLEAR="${PERSISTENT_STORAGE_API}/clear"
+PERSISTENT_STORAGE_API_SOFTWARE="${PERSISTENT_STORAGE_API}/software"
+PERSISTENT_STORAGE_API_NOBACKUP="${PERSISTENT_STORAGE_API}/no-backup"
+PERSISTENT_STORAGE_API_USER="${PERSISTENT_STORAGE_API}/user"
+
+#SUGaR LDE support
+MAPDIR=/usr/share/ericsson/cba/id-mapping
+UIDMAPF=${MAPDIR}/uid.map.defs
+GIDMAPF=${MAPDIR}/gid.map.defs
+
+CONFIG=`cat $PERSISTENT_STORAGE_API_CONFIG`
+COM_CONFIG_COMP="${CONFIG}/com-apr9010443/lib/comp"
+COM_COMP="/opt/com/lib/comp"
+
+# COMSA files
+COMSA_CONF="/opt/com/etc"
+COMSA_SCRIPTS="/usr/bin"
+COMSA_UTIL="/opt/com/util"
+
+#define utilchown
+if ([ -f $UIDMAPF ] && [ -f $GIDMAPF ]) ; then
+    utilchown=$(which chown 2> /dev/null)
+else
+    utilchown=/bin/true
+fi
+
+ch_own_mod() {
+    local ch_own_mod_enter=`ls -l -d $4`
+    if [ -f $UIDMAPF ] && [ -f $GIDMAPF ] ; then
+        if [ -f $4 ] ; then
+            $utilchown $2:$3 $4
+            chmod $1 $4
+        fi
+    fi
+    local ch_own_mod_exit=`ls -l -d $4`
+}
+
+##
+## ERROR print
+##
+die() {
+    logger -s -t COM_SA -p user.err "ERROR ($prg): $@"
+    exit 1
+}
+
+##
+## INFORMATION print
+##
+info() {
+    logger -s -t COM_SA -p user.info "INFORMATION ($prg): $@"
+}
+
+##
+## Copy comsa files, then manage permissions and ownership
+## Syntax: comsa_file_copy <source> <filename> <destination> <mode> <group> <owner>
+##
+comsa_file_copy() {
+        if [ -f "$1/$2" ]; then
+            if [ -r "$1/$2" ]; then
+                `cp -f "$1/$2" "$3"`
+                ch_own_mod $4 $5 $6 ${3}/${2}
+            else
+                info "File $1/$2 not readable"
+            fi
+        else
+            info "File $1/$2 does not exist"
+        fi
+}
+
+##
+## Change the path locations to pso clear area for the traceto and traceconfig tags
+## Syntax: config_change <coremw-com-sa.cfg diretory>
+##
+config_change() {
+        if [ -f $1/coremw-com-sa.cfg ]; then
+            info "comsa_pso config_change() $1/coremw-com-sa.cfg exist"
+            sed "s@/opt/com/etc@${COMSA_CLEAR_DIR}@g" $1/coremw-com-sa.cfg > $1/coremw-com-sa.cfg.new
+            sed "s@/opt/com/log@${COMSA_CLEAR_DIR}@g" $1/coremw-com-sa.cfg.new > $1/coremw-com-sa.cfg
+            rm -f $1/coremw-com-sa.cfg.new
+            ch_own_mod 640 root com-core $1/coremw-com-sa.cfg
+        fi
+}
+
+##
+## create clear repository at installation/Update time
+##
+clear() {
+    info "clear called"
+    if [ -f ${PERSISTENT_STORAGE_API_CLEAR} ]; then
+        CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CLEAR`
+        COMSA_CLEAR_DIR="${CONF_REPOS}${COMSA_DIR}"
+        mkdir -p -m 770 "${COMSA_CLEAR_DIR}"
+        comsa_file_copy $COMSA_CONF com_sa_trace.conf $COMSA_CLEAR_DIR 660 root com-core
+        comsa_file_copy $COMSA_CONF com_sa_log.cfg $COMSA_CLEAR_DIR 660 root com-core
+    fi
+}
+
+##
+## create config repository at installation/Update time
+##
+config() {
+    info "comsa_pso config() called"
+    if [ -f ${PERSISTENT_STORAGE_API_CONFIG} ]; then
+        info "comsa_pso config() PERSISTENT_STORAGE_API_CONFIG exist"
+        CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CONFIG`
+        info $CONF_REPOS
+        COMSA_CONF_DIR="${CONF_REPOS}${COMSA_DIR}"
+        info "$COMSA_CONF_DIR"
+        mkdir -p -m 770 "${COMSA_CONF_DIR}"
+        info "comsa_pso conf() new com_sa_trace.conf"
+        comsa_file_copy $COMSA_CONF com_sa_trace.conf $COMSA_CONF_DIR 660 root com-core
+        info "comsa_pso conf() new com_sa_log.cfg"
+        comsa_file_copy $COMSA_CONF com_sa_log.cfg $COMSA_CONF_DIR 660 root com-core
+        OMSA_ETC="${COMSA_CONF_DIR}/etc"
+        mkdir -p -m 770 "${OMSA_ETC}"
+        info "comsa_pso conf() new comsa.cfg"
+        comsa_file_copy $COMSA_CONF comsa.cfg $OMSA_ETC 660 root com-core
+        OMSA_MIM="${COMSA_CONF_DIR}/repository"
+        info "$OMSA_MIM"
+        mkdir -p -m 770 "${OMSA_MIM}"
+        SW_REPOS=`cat ${PERSISTENT_STORAGE_API_SOFTWARE}`
+        COMSA_SOFTWARE_DIR="$SW_REPOS$COMSA_DIR"
+        mkdir -p -m 770 "${COMSA_SOFTWARE_DIR}"
+    else
+        info "comsa_pso conf() PERSISTENT_STORAGE_API_CONFIG not exist"
+    fi
+}
+
+##
+## create software repository at installation/Update time
+##
+nobackup() {
+    info "comsa_pso nobackup() called"
+    if [ -f ${PERSISTENT_STORAGE_API_NOBACKUP} ]; then
+        info "comsa_pso nobackup() PERSISTENT_STORAGE_API_NOBACKUP exist"
+        NOBACK_REPOS=`cat $PERSISTENT_STORAGE_API_NOBACKUP`
+        COMSA_NOBACK_DIR="${NOBACK_REPOS}${COMSA_DIR}"
+        info "$COMSA_NOBACK_DIR"
+        mkdir -p -m 750 "${COMSA_NOBACK_DIR}"
+        COMSA_BACK="${COMSA_NOBACK_DIR}/backup"
+        info "$COMSA_BACK"
+        mkdir -p -m 750 "${COMSA_BACK}"
+    else
+        info "comsa_pso nobackup() PERSISTENT_STORAGE_API_NOBACKUP not exist"
+    fi
+}
+
+##
+## new configuration at installation/upgrade time
+##
+install_conf() {
+    info "comsa_pso install_conf() called"
+    if [ -f ${PERSISTENT_STORAGE_API_CLEAR} ]; then
+        CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CLEAR`
+        COMSA_CLEAR_DIR="${CONF_REPOS}${COMSA_DIR}"
+        info "comsa_pso install_conf() ${COMSA_CLEAR_DIR}"
+    fi
+    if [ -f ${PERSISTENT_STORAGE_API_CONFIG} ]; then
+        CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CONFIG`
+        COMSA_CONF_DIR="${CONF_REPOS}${COMSA_DIR}"
+        info "comsa_pso install_conf() $COMSA_CONF_DIR"
+        if [ -d ${COMSA_CONF_DIR} ]; then
+            info "comsa_pso install_conf() $COMSA_CONF_DIR exist"
+            config_change $COM_COMP
+            ch_own_mod 640 root com-core /opt/com/lib/comp/coremw-com-sa.so
+            ch_own_mod 640 root com-core /opt/com/lib/comp/coremw-pmt-sa.so
+            ch_own_mod 640 com-core com-core /opt/com/lib/comsa_tp.so
+            config_change $COM_CONFIG_COMP
+        fi
+    fi
+}
+
+##
+## new configuration at OS upgrade time
+##
+psoconfig() {
+    info "comsa_pso psoconfig() called"
+    if [ -f ${PERSISTENT_STORAGE_API_CLEAR} ]; then
+        CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CLEAR`
+        COMSA_CLEAR_DIR="${CONF_REPOS}${COMSA_DIR}"
+        info "comsa_pso psoconfig() ${COMSA_CLEAR_DIR}"
+    fi
+    if [ -f ${PERSISTENT_STORAGE_API_CONFIG} ]; then
+        CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CONFIG`
+        COMSA_CONF_DIR="${CONF_REPOS}${COMSA_DIR}"
+        info "comsa_pso psoconfig() $COMSA_CONF_DIR"
+        if [ -d ${COMSA_CONF_DIR} ]; then
+            info "comsa_pso psoconfig() $COMSA_CONF_DIR exist"
+            config_change $COM_COMP
+            config_change $COM_CONFIG_COMP
+            if [ -f ${COMSA_CONF_DIR}/com_sa_trace.conf ]; then
+                info "comsa_pso psoconfig() com_sa_trace.conf exist"
+            else
+                info "comsa_pso psoconfig() new com_sa_trace.conf"
+                comsa_file_copy $COMSA_CONF com_sa_trace.conf $COMSA_CONF_DIR 660 root com-core
+                comsa_file_copy $COMSA_CONF_DIR com_sa_trace.conf $COMSA_CLEAR_DIR 660 root com-core
+            fi
+        fi
+    fi
+}
+
+##
+## creating Config and Clear repository at COM-SA installation time
+##
+install() {
+    info "comsa_pso install start"
+    remove
+    config
+    clear
+    nobackup
+    install_conf
+}
+
+##
+##
+##
+remove() {
+    info "comsa_pso remove() called"
+    if [ -f ${PERSISTENT_STORAGE_API_CLEAR} ]; then
+        CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CLEAR`
+        COMSA_CLEAR_DIR="${CONF_REPOS}${COMSA_DIR}"
+        if [ -d ${COMSA_CLEAR_DIR} ]; then
+            info "comsa_pso remove() $COMSA_CLEAR_DIR exit"
+            rm -rf ${COMSA_CLEAR_DIR}
+        fi
+    fi
+}
+
+
+##
+## creating new configuration and register comsa backup participant at system upgrade time
+##
+start() {
+    info "comsa_pso start() called"
+    if [ -f ${PERSISTENT_STORAGE_API_CLEAR} ]; then
+        CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CLEAR`
+        COMSA_CLEAR_DIR="${CONF_REPOS}${COMSA_DIR}"
+    fi
+    if [ -f ${PERSISTENT_STORAGE_API_CONFIG} ]; then
+        CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CONFIG`
+        COMSA_CONF_DIR="${CONF_REPOS}${COMSA_DIR}"
+        info "comsa_pso start() $COMSA_CONF_DIR"
+        if [ -d ${COMSA_CONF_DIR} ]; then
+            info "comsa_pso start() $COMSA_CONF_DIR exist"
+            if [ -d ${COMSA_CLEAR_DIR} ]; then
+                if [ -f ${COMSA_CLEAR_DIR}/com_sa_trace.conf ]; then
+                    info "comsa_pso start() com_sa_trace.conf exist"
+                else
+                    info "comsa_pso start() com_sa_trace.conf not exist"
+                    comsa_file_copy $COMSA_CONF_DIR com_sa_trace.conf $COMSA_CLEAR_DIR 660 root com-core
+                fi
+            else
+                clear
+                comsa_file_copy $COMSA_CONF_DIR com_sa_trace.conf $COMSA_CLEAR_DIR 660 root com-core
+            fi
+        else
+            info "comsa_pso start() $COMSA_CONF_DIR not exist"
+            config
+            clear
+            nobackup
+            psoconfig
+        fi
+        logconf
+        uuidconf
+    fi
+}
+
+##
+## COMSA Trace Services config
+##
+trcconf() {
+    if [ -f ${PERSISTENT_STORAGE_API_CLEAR} ]; then
+        CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CLEAR`
+        COMSA_CLEAR_DIR="${CONF_REPOS}${COMSA_DIR}"
+        if [ -d ${COMSA_CLEAR_DIR} ]; then
+            if [ ! -f ${COMSA_CLEAR_DIR}/com_sa_trace.conf ]; then
+                info "comsa_pso trcconf() com_sa_trace.conf not exist"
+                comsa_file_copy $COMSA_CONF com_sa_trace.conf $COMSA_CLEAR_DIR 660 root com-core
+            fi
+        fi
+    fi
+}
+
+##
+## COMSA Log Services config
+##
+logconf() {
+    if [ -f ${PERSISTENT_STORAGE_API_CLEAR} ]; then
+        CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CLEAR`
+        COMSA_CLEAR_DIR="${CONF_REPOS}${COMSA_DIR}"
+        if [ -d ${COMSA_CLEAR_DIR} ]; then
+            if [ ! -f ${COMSA_CLEAR_DIR}/com_sa_log.cfg ]; then
+                info "comsa_pso logconf() com_sa_log.cfg not exist"
+                comsa_file_copy $COMSA_CONF_DIR com_sa_log.cfg $COMSA_CLEAR_DIR 660 root com-core
+            fi
+        fi
+    fi
+}
+
+##
+## COMSA UUID config
+##
+uuidconf() {
+    if [ -f ${PERSISTENT_STORAGE_API_CONFIG} ]; then
+        CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CONFIG`
+        COMSA_CONF_DIR="${CONF_REPOS}${COMSA_DIR}"
+        if [ -d ${COMSA_CONF_DIR}/etc ]; then
+            if [ ! -f ${COMSA_CONF_DIR}/etc/comsa.cfg ]; then
+                info "comsa_pso uuidconf() comsa.cfg not exist"
+                comsa_file_copy $COMSA_CONF comsa.cfg $COMSA_CONF_DIR/etc 660 root com-core
+            fi
+        fi
+    fi
+}
+
+#
+# return the path to the PSO area given as parameter
+#
+getPath(){
+    case $1 in
+        "clear")
+            if [ -f ${PERSISTENT_STORAGE_API_CLEAR} ]; then
+                CLEAR_AREA=`cat $PERSISTENT_STORAGE_API_CLEAR`
+                echo $CLEAR_AREA
+            else
+                exit 1
+            fi
+        ;;
+        "config")
+            if [ -f ${PERSISTENT_STORAGE_API_CONFIG} ]; then
+                CONFIG_AREA=`cat $PERSISTENT_STORAGE_API_CONFIG`
+                echo $CONFIG_AREA
+            else
+                exit 1
+            fi
+        ;;
+        "config_comsa")
+            if [ -f ${PERSISTENT_STORAGE_API_CONFIG} ]; then
+                CONFIG_AREA=`cat $PERSISTENT_STORAGE_API_CONFIG`
+                echo ${CONFIG_AREA}${COMSA_DIR}
+            else
+                exit 1
+            fi
+        ;;
+        "no-backup")
+            if [ -f ${PERSISTENT_STORAGE_API_NOBACKUP} ]; then
+                NOBACKUP_AREA=`cat $PERSISTENT_STORAGE_API_NOBACKUP`
+                echo $NOBACKUP_AREA
+            else
+                exit 1
+            fi
+        ;;
+        "software")
+            if [ -f ${PERSISTENT_STORAGE_API_SOFTWARE} ]; then
+                SOFTWARE_AREA=`cat $PERSISTENT_STORAGE_API_SOFTWARE`
+                echo $SOFTWARE_AREA
+            else
+                exit 1
+            fi
+        ;;
+        "user")
+            if [ -f ${PERSISTENT_STORAGE_API_USER} ]; then
+                USER_AREA=`cat $PERSISTENT_STORAGE_API_USER`
+                echo $USER_AREA
+            else
+                exit 1
+            fi
+        ;;
+        "")
+            if [ -d ${PERSISTENT_STORAGE_API} ]; then
+                echo $PERSISTENT_STORAGE_API
+            else
+                exit 1
+            fi
+        ;;
+        *)
+            info "Unknown area requested. Currently supported: clear, config, no-backup, software, user"
+            exit 1
+        ;;
+    esac
+
+}
+
+#
+# return the name of the ComSa directory name in the PSO area.
+#
+getComSaDirectory(){
+    echo $COMSA_DIR
+}
+
+case $1 in
+"install")
+        install
+        ;;
+"remove")
+        remove
+        ;;
+"start")
+        start
+        ;;
+"install_conf")
+         install_conf
+         ;;
+"trcconf")
+        trcconf
+        ;;
+"getPath")
+        getPath $2
+        ;;
+"getComSaDirectory")
+        getComSaDirectory
+        ;;
+    "")
+        info "sub-command must be specified"
+        info "usage: $NAME [install|start|getComSaDirectory] or $NAME getPath [PSO area]"
+        exit 1
+        ;;
+    *)
+        info "unknown command"
+        exit 1
+        ;;
+esac
+exit 0

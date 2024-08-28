@@ -1,0 +1,10 @@
+[Unit]
+Description=COM FUSE kernel module service
+After=lde-servicestart.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/com/util/load_com_kmodules.sh
+
+[Install]
+WantedBy=multi-user.target

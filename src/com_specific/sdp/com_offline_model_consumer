@@ -1,0 +1,343 @@
+#! /bin/sh
+# Copyright (C) 2016 by Ericsson AB
+# S - 125 26  STOCKHOLM
+# SWEDEN, tel int + 46 10 719 0000
+#
+# The copyright to the computer program herein is the property of
+# Ericsson AB. The program may be used and/or copied only with the
+# written permission from Ericsson AB, or in accordance with the terms
+# and conditions stipulated in the agreement/contract under which the
+# program has been supplied.
+#
+# All rights reserved.
+#
+
+#
+# com_offline_model_consumer [add <absolute path of model file> | done]
+#
+#  COM MDF model consumer for offline image creation and instantiation
+#
+#   add <absolute path of model file> : add model to consumer
+#   done                              : commits the added models.
+#
+#   Exit codes:
+#               0 - OK
+#               1 - ERROR
+#               2 - Consumer Failed
+#
+
+COM_COMEA="/opt/com/comea/bin/comea"
+COM_CONFIG_TOOL="/opt/com/util/com_config_tool"
+COM_MIM_TOOL="/opt/com/bin/com_mim_tool"
+COMSA_PSO="/usr/bin/comsa_pso"
+TAG=$(basename "$0")
+
+MAPDIR="/usr/share/ericsson/cba/id-mapping"
+UIDMAPF="${MAPDIR}/uid.map.defs"
+GIDMAPF="${MAPDIR}/gid.map.defs"
+COM_GROUP="com-core"
+
+ERROR=1
+MODELERROR=2
+
+# Set DO_SYSLOG=1 to write DEBUG logs
+DO_SYSLOG=0
+
+opthandler="--modelHandler=MW_OAM"
+optmoversion="--managedObjectVersion=3"
+opttxversion="--transactionalResourceVersion=1"
+
+### Functions
+
+# Log error message to SYSLOG and exit
+# Argument 1: The logmessage
+# Argument 2: optional errorcode. If omitted exit code 1 will be used
+die() {
+    logger -s -p local0.err -t "${TAG}" "ERROR $1"
+    [ "$2" ] && exit "$2"
+    exit $ERROR
+}
+
+# Log debug message to SYSLOG based on value of variable DO_SYSLOG
+debug() {
+    if [ $DO_SYSLOG -eq 1 ]; then
+        logger -p local0.debug -t "${TAG}" "DEBUG $@"
+    fi
+}
+
+# Log message to SYSLOG
+log() {
+    logger -p local0.info -t "${TAG}" "INFO $@"
+}
+
+# Get help message
+help() {
+    cat <<_usage_
+        usage: ${TAG} <Options>
+
+        Options:
+            add <absolute path of model file> [SubOptions]         Add models to consumer.
+                SubOptions:
+                        [--modelHandler <value>]                   ModelHandler name.
+                        [--managedObjectVersion <value>]           ManagedObject interface version.
+                        [--transactionalResourceVersion <value>]   TransactionalResource interface version.
+
+            done                                                   Commits the added models.
+_usage_
+}
+
+# Check the exit value from the last command and log it as warning.
+check_exit_value () {
+    if [ $? -ne 0 ]; then
+        logger -p local0.warning -t "${TAG}" "WARNING $1"
+    fi
+}
+
+# Modify the permissions and group of all COM related files and directories under PSO
+# $1 COM PSO directory
+# $2 group name
+# $3 directory permissions
+# $4 file permissions
+modify_permissions_and_group () {
+    debug "Enter modify_permissions_and_group()"
+    if [ -d $1 ]; then
+        ${utilchmod} "$3" "$1"
+        check_exit_value "Unable to change the permissions for directory $1"
+        ${utilchgrp} "$2" "$1"
+        check_exit_value "Unable to change the group for directory $1"
+
+        # Ensure that directory contains file(s)
+        files=$(find "$1" -maxdepth 1 -type f)
+        for file in ${files}
+        do
+            ${utilchmod} "$4" "${file}"
+            check_exit_value "Unable to change the permissions of file ${file} under directory $1"
+            ${utilchgrp} "$2" "${file}"
+            check_exit_value "Unable to change the group of file ${file} under directory $1"
+        done
+    fi
+    debug "Exit modify_permissions_and_group()"
+}
+
+# Create COM PSO structure
+create_pso() {
+    debug "Enter create_pso()"
+    # Try to create the persistent configuration area for PSO
+    if [ -f ${COM_COMEA} ]; then
+        # Check existence of COM PSO config directory
+        # If it doesn't exists then create COM PSO structure
+        if [ -z ${COM_PSO_CONFIG_DIR} ] || [ ! -d ${COM_PSO_CONFIG_DIR} ]; then
+            # Start by removing possible
+            # leftovers from previously installation
+            ${COM_COMEA} pso uninitialize
+            ${COM_COMEA} pso initialize
+
+            COM_PSO_CONFIG_DIR=$(${COM_COMEA} pso config)
+            COM_PSO_CLEAR_DIR=$(${COM_COMEA} pso clear)
+            COM_PSO_NO_BACKUP_DIR=$(${COM_COMEA} pso no-backup)
+            COM_PSO_USER_DIR=$(${COM_COMEA} pso user)
+            COM_PSO_SOFTWARE_DIR=$(${COM_COMEA} pso software)
+
+            # Change group of created COM PSO directories (i.e com-core)
+            ${utilchgrp} "${COM_GROUP}" "${COM_PSO_CLEAR_DIR}" "${COM_PSO_NO_BACKUP_DIR}" "${COM_PSO_USER_DIR}" "${COM_PSO_CONFIG_DIR}" "${COM_PSO_SOFTWARE_DIR}"
+            check_exit_value "Unable to change the group ${COM_GROUP} for directories ${COM_PSO_CLEAR_DIR} ${COM_PSO_NO_BACKUP_DIR} ${COM_PSO_USER_DIR} ${COM_PSO_CONFIG_DIR} ${COM_PSO_SOFTWARE_DIR}"
+
+            # Create the persistent configuration files in PSO
+            # If the PSO is not available the creation of repository will
+            # be in /home/com if the directory exists
+            if [ -f ${COM_CONFIG_TOOL} ]; then
+                ${COM_CONFIG_TOOL} create
+            fi
+
+            "$COM_MIM_TOOL" --modelHandler=MW_OAM --managedObjectVersion=3 --transactionalResourceVersion=1
+            "$COM_MIM_TOOL" --commit
+
+            # Create COMSA PSO structure and copy necessary files
+            if [ -f ${COMSA_PSO} ]; then
+                ${COMSA_PSO} install
+                # Modify group of COMSA PSO config and its sub-directories directory to com-core
+                dirs=$(find "${COMSA_PSO_CONFIG_DIR}" -perm 770 ! -group "${COM_GROUP}" -type d)
+                for dir in ${dirs}
+                do
+                    $utilchgrp "${COM_GROUP}" "${dir}"
+                    check_exit_value "Unable to change group of directory ${dir}"
+                done
+            fi
+
+            # As per SUGaR guidelines modify permissions and group for above created files and directories
+            modify_permissions_and_group "${COM_PSO_CONFIG_DIR}/etc" "${COM_GROUP}" "770" "660"
+            modify_permissions_and_group "${COM_PSO_CONFIG_DIR}/etc/model" "${COM_GROUP}" "750" "660"
+            modify_permissions_and_group "${COM_PSO_CONFIG_DIR}/lib" "${COM_GROUP}" "750" "640"
+        fi
+    fi
+    debug "Exit create_pso()"
+}
+
+# Argument 1 is model file name
+get_mom_name() {
+    debug "Enter get_mom_name()"
+    momNameAll=`awk '/<mim /,/>/' $1 | sed 'N;s/\n/ /' |  awk -F ' name=\"' '{print $2}' | cut -d\" -f1 | sed '/^$/d'`
+    if [[ $momNameAll = "" ]]; then
+        die "MOM name not found in model file $1" $MODELERROR
+    fi
+
+    arr=($momNameAll)
+    momName=${arr[0]}
+    debug "Exit get_mom_name()"
+}
+
+# Add copied model from COMSA PSO to COM_MIM_TOOL
+add_models() {
+    debug "Enter add_model()"
+
+    while IFS= read -r line
+     do
+        file_name=$(echo "$line" | cut -d "=" -f2 | cut -d " " -f1)
+        ${COM_MIM_TOOL} $line || die "add(): Failed to add ${file_name} with ${COM_MIM_TOOL}" ${MODELERROR}
+        log "Added model :${file_name}"
+    done < "$OFFLINE_MODELS"
+
+    rm -f "$OFFLINE_MODELS"
+
+    debug "Exit add_model()"
+}
+
+# Copy input model file to COMSA PSO COFIG REPO area
+# Set permissions and group to the newly created model file accordingly
+save_model_file() {
+    debug "Enter save_model_file()"
+    # Check exists of COMSA PSO config repo directory and create it and modify permissions
+    if [ ! -d ${COMSA_PSO_CONFIG_REPO_DIR} ];then
+        mkdir -p "${COMSA_PSO_CONFIG_REPO_DIR}"
+        modify_permissions_and_group "${COMSA_PSO_CONFIG_REPO_DIR}" "${COM_GROUP}" "770" "660"
+    fi
+
+    # Copy model file to COMSA PSO config repo directory and change permissions and group accordingly
+    cp -f $1 $2
+    check_exit_value "Failed to copy model file $1 to $2"
+    $utilchmod 660 $2
+    check_exit_value "Failed to change permissions of model file $2"
+    $utilchgrp "${COM_GROUP}" $2
+    check_exit_value "Failed to change group of model file $2"
+    debug "Exit save_model_file()"
+}
+
+parse_cmd_args() {
+    shift
+    shift
+    while [ "$1" != "" ];
+     do
+        PARAM=$1
+        VALUE=$2
+        case $PARAM in
+             --modelHandler)
+               opthandler="$PARAM=$VALUE"
+               ;;
+             --managedObjectVersion)
+               optmoversion="$PARAM=$VALUE"
+               ;;
+             --transactionalResourceVersion)
+               opttxversion="$PARAM=$VALUE"
+               ;;
+             *)
+               echo "ERROR: unknown parameter \"$PARAM\""
+               exit $ERROR
+               ;;
+        esac
+        shift
+        shift
+     done
+}
+
+# Create COM PSO structure if it doesn't exists
+# Copy model to COMSA PSO structure by renaming it with MIMNAME_mp.xml
+model_add() {
+    debug "Enter model_add()"
+    test -f $2 || die "Model file $2 to be added does not exist" $MODELERROR
+    inputModelFile="$2"
+
+    parse_cmd_args "$@"
+
+    # Create COM & COMSA PSO structure
+    create_pso
+
+    # Get MoM name from input model file
+    get_mom_name "${inputModelFile}"
+
+    # Prepare new model file name based on MoM name of the input model file
+    newModelFileName=${momName}"_mp.xml"
+    newModelFile="${COMSA_PSO_CONFIG_REPO_DIR}/${newModelFileName}"
+
+    # Save model file to COMSA PSO CONFIG REPO location with necessary permissions and group
+    save_model_file "${inputModelFile}" "${newModelFile}"
+
+    if [ ! -f "$OFFLINE_MODELS" ]; then
+       touch "$OFFLINE_MODELS"
+    fi
+
+    options="--addModelFile=$newModelFile $opthandler $optmoversion $opttxversion"
+    grep -q -F -e "$options" "$OFFLINE_MODELS" || echo "$options" >> "$OFFLINE_MODELS"
+
+    debug "Exit model_add()"
+}
+
+# Commit added models to COM_MIM_TOOL
+commit_models() {
+    debug "Enter commit_models()"
+    # Done mapped into COM_MIM_TOOL --commit
+    ${COM_MIM_TOOL} --commit
+    output=$?
+    if [[ $output != "0" ]]; then
+        log "Executing ${COM_MIM_TOOL} --commit  returned: ${output}"
+        debug "Exit commit_models()"
+        die "done_(): ${COM_MIM_TOOL} --commit failed." ${MODELERROR}
+    fi
+    log "Model done complete"
+    debug "Exit commit_models()"
+}
+
+# Deliver copied models to COM_MIM_TOOL
+# Commit the models delivered to COM_MIM_TOOL
+model_done() {
+    debug "Enter model_done()"
+    # Deliver newly copied model file to COM_MIM_TOOL
+    add_models
+
+    # Commit models
+    commit_models
+    debug "Exit model_done()"
+}
+
+### Validations
+[ -x ${COM_MIM_TOOL} ] || die "${COM_MIM_TOOL} file doesn't exist." ${ERROR}
+[ -x ${COM_COMEA} ] || die "${COM_COMEA} file doesn't exist." ${ERROR}
+[ -x ${COMSA_PSO} ] || die "${COMSA_PSO} file doesn't exist." ${ERROR}
+[ -x ${COM_CONFIG_TOOL} ] || die "${COM_CONFIG_TOOL} file doesn't exist." ${ERROR}
+
+# Get COM PSO config
+COM_PSO_CONFIG_DIR=$(${COM_COMEA} pso config)
+
+# Get COMSA PSO structure for copying model file
+PSO_CONFIG_DIR=$(${COMSA_PSO} getPath config)
+COMSA_PSO_CONFIG_DIR="${PSO_CONFIG_DIR}/comsa_for_coremw-apr9010555"
+COMSA_PSO_CONFIG_REPO_DIR="${COMSA_PSO_CONFIG_DIR}/repository"
+
+OFFLINE_MODELS="$COMSA_PSO_CONFIG_REPO_DIR/offline_models"
+
+#define utilchown
+if ([ -f $UIDMAPF ] && [ -f $GIDMAPF ]) ; then
+    utilchmod=$(which chmod 2> /dev/null)
+    utilchgrp=$(which chgrp 2> /dev/null)
+else
+    utilchmod=/bin/true
+    utilchgrp=/bin/true
+fi
+
+### Main
+case "$1" in
+    "add")    model_add "$@" ;;
+    "done")   model_done ;;
+    *) help ;;
+esac
+
+exit 0

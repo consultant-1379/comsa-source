@@ -1,0 +1,170 @@
+#!/bin/sh -x
+##
+## Copyright (c) 2011Ericsson AB, 2010 - 2011.
+##
+## All Rights Reserved. Reproduction in whole or in part is prohibited
+## without the written consent of the copyright owner.
+##
+## ERICSSON MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE
+## SUITABILITY OF THE SOFTWARE, EITHER EXPRESS OR IMPLIED, INCLUDING
+## BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY,
+## FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT. ERICSSON
+## SHALL NOT BE LIABLE FOR ANY DAMAGES SUFFERED BY LICENSEE AS A
+## RESULT OF USING, MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS
+## DERIVATIVES.
+##
+## Author: efaiami
+## Modify: xanhdao 2013-11-18   MR28452: stop deliver IMM related Model for COM
+## Modify: xnikvap 2015-05-12   MR29930: AMF controlled SSHD
+## Modify: xadaleg 2015-07-17   MR42277: Remove old interfaces and models
+##
+
+sdpname=`echo $2 | sed "s/safSmfBundle=//"`
+campaign=`echo $4`
+com_mim_tool=/opt/com/bin/${com_mim_tool:-com_mim_tool}
+NAME=$(basename $0)
+COMSA_DIR="/comsa_for_coremw-apr9010555"
+CMW_REPO="/coremw/repository"
+## PSO API
+PERSISTENT_STORAGE_API="/usr/share/pso/storage-paths"
+PERSISTENT_STORAGE_API_CONFIG="${PERSISTENT_STORAGE_API}/config"
+PERSISTENT_STORAGE_API_CLEAR="${PERSISTENT_STORAGE_API}/clear"
+PERSISTENT_STORAGE_API_SOFTWARE="${PERSISTENT_STORAGE_API}/software"
+
+##
+## INFORMATION print
+##
+info() {
+    logger -s -t COM_SA -p user.info "INFORMATION ($prg): $@"
+}
+
+die() {
+    info "$1"
+    exit 1
+}
+
+##
+##comsa_file_copy which copies from $1 to $2
+##
+comsa_file_copy ()
+{
+	info "copying files from $1 to $2"
+	if [ -f "${1}" ]; then
+		`cp -f ${1} ${2}`
+	else
+		info "${1} file not found"	48
+	fi
+}
+
+
+copy_config_file() {
+    CONFIG_FILE=$1
+    OLD_CONFIG_FILE=$2
+    listAttr=`grep -v "^#" $CONFIG_FILE | cut -d '=' -f 1`
+    for attr in $listAttr; do
+        attrValue=$(grep -v '^#' "$OLD_CONFIG_FILE" | grep "$attr" | cut -d '=' -f 2)
+        if [ ! -z $attrValue ]; then
+            sed -i "s/^\($attr\s*=\s*\).*$/\1$attrValue/" $CONFIG_FILE
+        fi
+    done
+}
+
+##
+## update model repository.
+##
+comsaupdate() {
+    info "comsa_bfu comsaupdate() called"
+    if [ -f ${PERSISTENT_STORAGE_API_CLEAR} ]; then
+        CLEAR_REPOS=`cat $PERSISTENT_STORAGE_API_CLEAR`
+        COMSA_CLEAR_DIR="${CLEAR_REPOS}${COMSA_DIR}"
+        if [ -d ${COMSA_CLEAR_DIR} ]; then
+            if [ ! -f ${COMSA_CLEAR_DIR}/com_sa_log.cfg ]; then
+                info "comsa_bfu comsaupdate() com_sa_log.cfg not exist"
+                comsa_file_copy $campaign/com_sa_log.cfg $COMSA_CLEAR_DIR
+            fi
+                comsa_file_copy $campaign/com_sa_trace.conf $COMSA_CLEAR_DIR
+        fi
+    fi
+    if [ -f ${PERSISTENT_STORAGE_API_CONFIG} ]; then
+        info "comsa_bfu comsaupdate() PERSISTENT_STORAGE_API_CONFIG exist"
+        CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CONFIG`
+        COMSA_CONF_DIR="${CONF_REPOS}${COMSA_DIR}"
+        info "$COMSA_CONF_DIR"
+        mkdir -p "${COMSA_CONF_DIR}"
+        COMSA_MIM="${COMSA_CONF_DIR}/repository"
+        mkdir -p "${COMSA_MIM}"
+        mkdir -p "${COMSA_MIM}/${sdpname}"
+        COMSA_ETC="${COMSA_CONF_DIR}/etc"
+        mkdir -p "${COMSA_ETC}"
+        info "comsa_bfu comsaupdate() new com_sa_trace.conf"
+        comsa_file_copy $campaign/com_sa_trace.conf $COMSA_CONF_DIR
+
+        if [ -f ${COMSA_ETC}/comsa.cfg ]; then
+            info "comsa.cfg exist"
+            mv ${COMSA_ETC}/comsa.cfg ${COMSA_ETC}/comsa.old.cfg
+            comsa_file_copy $campaign/comsa.cfg $COMSA_ETC
+            copy_config_file ${COMSA_ETC}/comsa.cfg ${COMSA_ETC}/comsa.old.cfg
+            rm ${COMSA_ETC}/comsa.old.cfg
+        else
+            info "comsa.cfg not exist"
+            comsa_file_copy $campaign/comsa.cfg $COMSA_ETC
+        fi
+    else
+        info "comsa_bfu comsaupdate() PERSISTENT_STORAGE_API_CONFIG not exist"
+    fi
+}
+
+
+##
+## Remove the SDPs from the CoreMW repository
+##
+remove() {
+    info "comsa_bfu $sdpname remove() called"
+    `cmw-sdp-remove ${sdpname}`
+    if [ -f ${PERSISTENT_STORAGE_API_CONFIG} ]; then
+        CONF_REPOS=`cat $PERSISTENT_STORAGE_API_CONFIG`
+        COMSA_CONF_REPO="${CONF_REPOS}${COMSA_DIR}/repository/${sdpname}"
+        info "$COMSA_CONF_REPO"
+        `rm -rf $COMSA_CONF_REPO`
+    fi
+}
+
+##
+## delivery IMM model for COM
+##
+ComImm() {
+    info "comsa_bfu ComImm() called"
+    cmw-modeltype-link IMM-I-COM_R1 IMM_R1 || info "cmw-modeltype-link IMM-I-COM_R1 failed"
+    cmw-modeltype-link IMM-I-COM_R2 IMM_R2 || info "cmw-modeltype-link IMM-I-COM_R2 failed"
+}
+
+
+
+##
+## MAIN
+##
+#info "comsa_bfu called with '$1' '$2' '$3' '$4'"
+case $1 in
+    "comsaupdate")
+        comsaupdate
+        ;;
+    "remove")
+        remove
+        ;;
+    "ComImm")
+        ComImm
+        ;;
+    "check_com_switch_over")
+        check_com_switch_over
+        ;;
+    "")
+        info "sub-command must be specified"
+        info "usage: $NAME comsaupdate|remove|ComImm|check_com_switch_over"
+        exit 1
+        ;;
+    *)
+        info "unknown command"
+        exit 1
+        ;;
+esac
+exit 0

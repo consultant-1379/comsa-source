@@ -1,0 +1,158 @@
+#!/bin/bash
+##
+##  Script for updating the configuration for the COM SA controlled SSHD
+##
+# Copyright (C) 2010 by Ericsson AB
+# S - 125 26  STOCKHOLM
+# SWEDEN, tel int + 46 10 719 0000
+#
+# The copyright to the computer program herein is the property of
+# Ericsson AB. The program may be used and/or copied only with the
+# written permission from Ericsson AB, or in accordance with the terms
+# and conditions stipulated in the agreement/contract under which the
+# program has been supplied.
+#
+# All rights reserved.
+
+# Check sshd debug
+SSHD_DEBUG=0
+
+#define debuglogger
+if [ $SSHD_DEBUG -eq 1 ] ; then
+	debuglogger=/bin/logger
+else
+	debuglogger=/bin/true
+fi
+
+# Used  for marking which component is editing the file
+UPDATING_COMPONENT=COM_SA
+# Checksum calculation process
+CHKTYPE=md5sum
+
+MARKER_TEMPLATE_INSERT="# ::${UPDATING_COMPONENT}::Insert::$CHKTYPE::%chksum%"
+
+SRC_FILE=/etc/ssh/sshd_config
+DST_FILE=${SRC_FILE}
+WORKING_FILE=/var/workfile
+
+# INFO print
+info() {
+    logger -s -t COM_SA -p user.info "INFORMATION: $@"
+}
+
+# Creates the marking line for a given line for insert operation.
+# arg 1: line to create a marking line for
+create_marking_line_insert()
+{
+   RETURN_cmli=`echo ${MARKER_TEMPLATE_INSERT} | sed "s/%chksum%/${calc_chksum}/g"`
+}
+
+# Checks in an entry is already inserted by checking if marker string exists
+is_insert_added()
+{
+  calc_chksum=`echo $1 | $CHKTYPE | cut -d " " -f 1`
+  create_marking_line_insert
+  marking_line=${RETURN_cmli}
+  grep "$marking_line" ${WORKING_FILE} > /dev/null
+  return $?
+}
+
+# Checks if the line exists in file
+# arg $1 line to locate
+line_exists()
+{
+   grep $1 ${WORKING_FILE} > /dev/null
+   return $?
+}
+
+# Inserts a line at the end of the file
+# Before inserting the line there is a marker line added before to indicate the change
+# This function will not add any entry if there is an entry already
+# arg $1 the line to insert
+insert()
+{
+  insert_line=$1
+  location_line=$2
+  is_insert_added "${insert_line}"
+  # Add only if its not already added by this component
+  if [ ! $? -eq 0 ]; then
+    calc_chksum=`echo ${insert_line} | $CHKTYPE | cut -d " " -f 1`
+    create_marking_line_insert
+    marking_line=${RETURN_cmli}
+
+    #To make sure that /etc/ssh/sshd_config file have same permissions after updating
+    cp ${WORKING_FILE} ${WORKING_FILE}_2
+    cat /dev/null > ${WORKING_FILE}_2
+
+    line_exists ${location_line}
+    if [ $? -eq 0 ]; then
+      sed "/${location_line}/ a ${marking_line}\n${insert_line}" ${WORKING_FILE} > ${WORKING_FILE}_2
+    else
+      sed "$ a ${marking_line}\n${insert_line}" ${WORKING_FILE} > ${WORKING_FILE}_2
+    fi
+    mv ${WORKING_FILE}_2 ${WORKING_FILE}
+  fi
+}
+
+open_editing_session()
+{
+  cp ${SRC_FILE} ${WORKING_FILE}
+}
+
+close_editing_session()
+{
+  mv -f ${WORKING_FILE} ${DST_FILE}
+  if [ $? -ne 0 ]
+  then
+     $debuglogger "In update_sshd,failed to move the changes to sshd_config "
+  fi
+}
+
+$debuglogger "update_sshd called with [$1]"
+
+# Lock mechanism to update sshd_config file
+LOCK_CMD="/usr/bin/lockfile"
+# Wait for up to 10 sec
+MAX_WAIT=10
+WAIT_COUNT=${MAX_WAIT}
+if [ -x "${LOCK_CMD}" ]; then
+  $debuglogger "In update_sshd, create sshd_config lock file"
+  while [ $WAIT_COUNT -gt 0 ]
+  do
+    $LOCK_CMD -1 -r5 -l10 -s 3 /etc/ssh/sshd_config.lock
+    if [ $? -eq 0 ]; then
+      $debuglogger "In update_sshd, lock file created"
+      break
+    else
+      if [ $WAIT_COUNT -eq $MAX_WAIT ]; then
+        $debuglogger "In update_sshd, waiting for the lock file to be created for a maximum of $MAX_WAIT seconds"
+      fi
+      sleep 1
+      WAIT_COUNT=$[$WAIT_COUNT - 1]
+    fi
+  done
+  if [ $WAIT_COUNT -eq 0 ]; then
+    info "In update_sshd, failed to create sshd_config lock file"
+  fi
+fi
+
+open_editing_session
+
+# Main
+if [ "$1" == "-d" ]; then
+	RMVLINE="# ::${UPDATING_COMPONENT}::Insert::$CHKTYPE::"
+        #To make sure that /etc/ssh/sshd_config file have same permissions after updating
+        cp ${WORKING_FILE} ${WORKING_FILE}_2
+        cat /dev/null > ${WORKING_FILE}_2
+	# Deletes line containing RMVLINE, and the line directly under.
+	sed -e "/${RMVLINE}/{N;s/\n/ /}" -e "/${RMVLINE}/d" ${WORKING_FILE} > ${WORKING_FILE}_2
+	mv ${WORKING_FILE}_2 ${WORKING_FILE}
+else
+	insert "Subsystem netconf /opt/com/bin/netconf" "^#[[:space:]]*override[[:space:]]*default[[:space:]]*of[[:space:]]*no[[:space:]]*subsystems"
+	insert "Subsystem cli /opt/com/bin/cliss" "^#[[:space:]]*override[[:space:]]*default[[:space:]]*of[[:space:]]*no[[:space:]]*subsystems"
+	insert "Port 830" ".*Port 22"
+	insert "Port 22" "Port 22"
+	insert "# PermitRootLogin no" ".*PermitRootLogin"
+fi
+
+close_editing_session
